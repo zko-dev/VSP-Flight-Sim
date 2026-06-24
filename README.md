@@ -6,8 +6,8 @@ Terminal based code package that allows direct control of VSPAero’s solver ran
 
 Broken into 3 major components: 
 1. OpenVSP itself <- allows user defined wing geom, control surface definitions
-2. run_sim.sh <- main executive for VLM batch config, solver .csv generation, and parser for results visualization
-3. gz_px4_launch.sh <- gazebo-px4 launcher for SITL flight sim
+3. run_sim.sh <- main executive for VLM batch config, solver .csv generation, and parser for results visualization
+4. gz_px4_launch.sh <- gazebo-px4 launcher for SITL flight sim
 
 # What this package does: 
 Significantly speeds up aircraft design validation, and prints out a .csv which can be analyzed quickly instead of looking at the GUI for manual interpolation.
@@ -32,3 +32,7 @@ Need to verify:
 - Re
 
 Integrate a direct topic plugin for Gazebo, building a direct a flight sim directly with openvsp geometry and solver result to simulate flight stability & behavior. 
+
+# Disclaimer:
+
+This project relies on [OpenVSP](http://openvsp.org) for parametric aircraft geometry and conceptual design.
