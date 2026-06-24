@@ -4,7 +4,7 @@ Bref = 0.995
 X_cg = 0.035999999999999997 
 Y_cg = 0 
 Z_cg = 0.0070000000000000001 
-Mach = 0.070000000000000007 
+Mach = 0.050000000000000003 
 AoA = 8 
 Beta = 0 
 ReCref = 200000 
@@ -36,7 +36,7 @@ NumberOfControlGroups = 2
 Ruddervon
 VTail_Surf0_Ruddervon,VTail_Surf1_Ruddervon
 -1, 1
-20.000
+40.000
 Aileron
 WingGeom_Surf0_Aileron,WingGeom_Surf1_Aileron
 1, 1
