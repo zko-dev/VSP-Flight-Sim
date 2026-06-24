@@ -6,12 +6,13 @@ Terminal based code package that allows direct control of VSPAero’s solver ran
 ![cfd](/output/cfd.png)
 
 Broken into 3 major components: 
-1. OpenVSP itself <- allows user defined wing geom, control surface definitions
-2. run_sim.sh <- main executive for VLM batch config, solver .csv generation, and parser for results visualization
-3. gz_px4_launch.sh <- gazebo-px4 launcher for SITL flight sim
+1. OpenVSP itself <- takes user defined wing geom, control surface definitions.
+2. run_sim.sh <- main executive for VLM batch config, solver .csv generation, and parser for custom results visualization.
+3. gz_px4_launch.sh <- gazebo-px4 launcher for SITL flight sim, remote controlled flight inside the simulated space.
 
-# What this package does: 
-Significantly speeds up aircraft design validation, and prints out a .csv which can be analyzed quickly instead of looking at the GUI for manual interpolation.
+# Why? 
+Standalone OpenVSP can be confusing if you don't know what you're looking for. Each run is limited to one geometric configuration at once. 
+By moving from the GUI to script, we can significantly speeds up computation labor by concatenating control surface sweeps, airfoil comparison, and unlock customizable workflow for your experiment. Prints out a .csv which can be analyzed flexibly either using this code or your method of analysis.
 
 For research:
 CFD Result still viewable in VSPAero GUI
@@ -21,7 +22,7 @@ Custom plotting tool using plotly python, we can automate a full aircraft analys
 ![Plot_example_2](/output/Plot_example_2.png)
 
 For aircraft prototyping:
-Creates a Kerbal-Space-Program alike environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before diving into optimization.
+Creates a KSP-like environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before diving into optimization.
 
 ![px4-gazebo](/output/px4-gazebo.png)
 
