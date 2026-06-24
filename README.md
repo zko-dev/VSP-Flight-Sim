@@ -24,7 +24,8 @@ Creates a Kerbal-Space-Program alike environment for rapid iterative design, all
 ![px4-gazebo](/output/px4-gazebo.png)
 
 # To Do:
-Right now run_sim.sh is running. Slowly working on the gazebo topics and degenGeom model import.
+Right now only run_sim.sh is running. Slowly working on the gazebo topics and degenGeom model import. Currently just running PX4_GZ_HEADLESS=0 make px4_sitl gz_tiltrotor
+
 Verified sweeping variables:
 - CG
 - Alpha
