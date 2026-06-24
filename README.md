@@ -1,4 +1,4 @@
-# VSP-Flight-Sim
+# VSP-Flight-Sim (Pre-beta)
 OpenVSP driven aircraft analysis tool &amp; gazebo SITL flight sim.
 
 # Description
