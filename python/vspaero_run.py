@@ -33,13 +33,14 @@ NUM_WAKE_ITERS = 8
 
 ALPHA_SWEEP = [-8,-6,-4,-2,0,2,4,6,8]
 BETA_SWEEP = [0]
-#ELEVATOR_SWEEP = [0,20,40] #positive is nose up
-ELEVATOR_SWEEP = [20]
+ELEVATOR_SWEEP = [0,20,40] #positive is nose up
+#ELEVATOR_SWEEP = [20]
 AILERON_SWEEP = [0] #positive is nose up
 
 #V_flight = np.array([30,60,90]) #kmh
 #MACH_SWEEP = (V_flight/(3.6*340)).astype(int)
-MACH_SWEEP = [0.03,0.05,0.07]
+#MACH_SWEEP = [0.03,0.05,0.07]
+MACH_SWEEP = [0.05]
 #XCG_SWEEP = [0.032, 0.036, 0.045, 0.05]
 XCG_SWEEP = [0.036]
 YCG = 0.0
