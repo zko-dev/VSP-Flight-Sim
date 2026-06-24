@@ -21,11 +21,12 @@ Custom plotting tool using plotly python, we can automate a full aircraft analys
 ![Plot_example_2](/output/Plot_example_2.png)
 
 For aircraft prototyping:
-Creates a Kerbal-Space-Program alike environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before ever touching the hardcore flight physics often only taught in B.S. level aerospace engineering.
+Creates a Kerbal-Space-Program alike environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before diving into optimization.
+
 ![px4-gazebo](/output/px4-gazebo.png)
 
 # To Do:
-Right now only run_sim.sh is running. Slowly working on the gazebo topics and degenGeom model import. Currently just running PX4_GZ_HEADLESS=0 make px4_sitl gz_tiltrotor
+At the moment, only run_sim.sh is fully setup. Slowly working on the gazebo topics and degenGeom model import. Currently just running PX4_GZ_HEADLESS=0 make px4_sitl gz_tiltrotor
 
 Verified sweeping variables:
 - CG
