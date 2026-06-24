@@ -1,0 +1,10 @@
+venv/
+venvsource/
+
+__pycache__/
+*.pyc
+.DS_Store
+.env
+
+.vsp3
+OpenVSP/
