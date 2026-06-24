@@ -3,8 +3,7 @@ OpenVSP driven aircraft analysis tool &amp; gazebo SITL flight sim.
 
 # Description
 Terminal based code package that allows direct control of VSPAero’s solver ranging from scheduled batch sweeps to turn-based geometric modification
-
-![Plot_example](/output/Plot_example.png)
+![cfd](/output/cfd.png)
 
 Broken into 3 major components: 
 1. OpenVSP itself <- allows user defined wing geom, control surface definitions
@@ -17,9 +16,12 @@ Significantly speeds up aircraft design validation, and prints out a .csv which 
 For research:
 CFD Result still viewable in VSPAero GUI
 Custom plotting tool using plotly python, we can automate a full aircraft analysis if scripted correctly to collect an aircraft’s stability via alpha, beta sweep -> Trim model through 3D plot -> CL,CD at different flying conditions and therefore infer it’s flight range.
+![Plot_example](/output/Plot_example.png)
+![Plot_example_2](/output/Plot_example_2.png)
 
 For aircraft prototyping:
 Creates a Kerbal-Space-Program alike environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before ever touching the hardcore flight physics often only taught in B.S. level aerospace engineering.
+![px4-gazebo](/output/px4-gazebo.png)
 
 # To Do:
 Right now run_sim.sh is running. Slowly working on the gazebo topics and degenGeom model import.
