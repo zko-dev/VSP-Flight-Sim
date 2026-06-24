@@ -4,7 +4,7 @@ OpenVSP driven aircraft analysis tool &amp; gazebo SITL flight sim.
 # Description
 Terminal based code package that allows direct control of VSPAero’s solver ranging from scheduled batch sweeps to turn-based geometric modification
 
-![Plot_example](/output/plot_example.png)
+![Plot_example](/vsp_flight_sim/output/Plot_example.png)
 
 Broken into 3 major components: 
 1. OpenVSP itself <- allows user defined wing geom, control surface definitions
