@@ -4,10 +4,12 @@ OpenVSP driven aircraft analysis tool &amp; gazebo SITL flight sim.
 # Description
 Terminal based code package that allows direct control of VSPAero’s solver ranging from scheduled batch sweeps to turn-based geometric modification
 
+![Plot_example](/output/plot_example.png)
+
 Broken into 3 major components: 
 1. OpenVSP itself <- allows user defined wing geom, control surface definitions
-3. run_sim.sh <- main executive for VLM batch config, solver .csv generation, and parser for results visualization
-4. gz_px4_launch.sh <- gazebo-px4 launcher for SITL flight sim
+2. run_sim.sh <- main executive for VLM batch config, solver .csv generation, and parser for results visualization
+3. gz_px4_launch.sh <- gazebo-px4 launcher for SITL flight sim
 
 # What this package does: 
 Significantly speeds up aircraft design validation, and prints out a .csv which can be analyzed quickly instead of looking at the GUI for manual interpolation.
