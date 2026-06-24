@@ -30,8 +30,28 @@ Verified sweeping variables:
 - Mach sweep
 Need to verify:
 - Re
+**Only VLM is necessary
 
 Integrate a direct topic plugin for Gazebo, building a direct a flight sim directly with openvsp geometry and solver result to simulate flight stability & behavior. 
+
+# Setup: 
+1. Create a local folder, git pull from this repo
+2. Download OpenVSP 3.50
+3. install python 3.13 (currently only 3.13 as gazebo-jetty does not support newer)
+4. source venv, activate it
+5. chmod +x setup.sh
+6. run ./setup.sh to install all required dependencies
+7. Setup complete!
+
+# How to use? 
+1. Get your openvsp geometry ready
+2. Run "Prep-solver" to parse its geometry
+3. Setup solver config in vspaero_run.py
+4. chmod +x run_sim.sh
+5. Run ./run_sim.sh
+6. After solver is complete, run Flight_Calc.ipynb to reveal the simulation result
+7. chmod +x gz_px4_launch.sh
+8. Run ./gz_px4_launch.sh, it should open up the simulation environment (I will include the installation steps in the future)
 
 # Disclaimer:
 
