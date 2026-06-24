@@ -1,0 +1,9 @@
+<link name="body">
+  <visual name="visual">
+    <geometry>
+      <mesh>
+        <uri>model://kestrel/meshes/EV2-b V2BAssem.stl</uri>
+      </mesh>
+    </geometry>
+  </visual>
+</link>
