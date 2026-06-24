@@ -16,6 +16,7 @@ Significantly speeds up aircraft design validation, and prints out a .csv which 
 For research:
 CFD Result still viewable in VSPAero GUI
 Custom plotting tool using plotly python, we can automate a full aircraft analysis if scripted correctly to collect an aircraft’s stability via alpha, beta sweep -> Trim model through 3D plot -> CL,CD at different flying conditions and therefore infer it’s flight range.
+
 ![Plot_example](/output/Plot_example.png)
 ![Plot_example_2](/output/Plot_example_2.png)
 
