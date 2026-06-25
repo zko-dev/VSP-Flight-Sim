@@ -25,6 +25,8 @@ For aircraft prototyping:
 Creates a KSP-like environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before diving into optimization.
 
 ![px4-gazebo](/output/px4-gazebo.png)
+https://youtu.be/vLZKRHpSPtk
+^Idea is to allow you, the user, to plug in a remote and fly in the sim!
 
 # To Do:
 At the moment, only run_sim.sh is fully setup. Slowly working on the gazebo topics and degenGeom model import. Currently just running PX4_GZ_HEADLESS=0 make px4_sitl gz_tiltrotor

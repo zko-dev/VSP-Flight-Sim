@@ -11,5 +11,6 @@ pkill -f ruby
 echo "Launching QGroundControl..."
 open -a /Applications/QGroundControl.app
 
+PX4_GZ_HEADLESS=0 make px4_sitl gz_standard_vtol
 
-PX4_GZ_HEADLESS=0 make px4_sitl gz_tiltrotor
+#https://docs.px4.io/main/en/sim_gazebo_gz/
