@@ -38,9 +38,10 @@ Verified sweeping variables:
 - Elevator
 - Aileron
 - Mach sweep
+
 Need to verify:
 - Re
-**Only VLM is necessary
+- Airfoil geometric comparison
 
 Integrate a direct topic plugin for Gazebo, building a direct a flight sim directly with openvsp geometry and solver result to simulate flight stability & behavior. 
 
