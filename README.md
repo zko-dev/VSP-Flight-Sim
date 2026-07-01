@@ -45,14 +45,15 @@ Need to verify:
 
 Integrate a direct topic plugin for Gazebo, building a direct a flight sim directly with openvsp geometry and solver result to simulate flight stability & behavior. 
 
-# Setup: 
+# Installation: 
 1. Create a local folder, git pull from this repo
 2. Download OpenVSP 3.50
-3. install python 3.13 (currently only 3.13 as gazebo-jetty does not support newer)
-4. source venv, activate it
-5. chmod +x setup.sh
-6. run ./setup.sh to install all required dependencies
-7. Setup complete!
+3. Install python 3.13 (currently only 3.13 as gazebo-jetty does not support newer)
+4. git pull https://github.com/zko-dev/VSP-Flight-Sim.git
+5. source venv, activate it
+6. chmod +x setup.sh
+7. run ./setup.sh to install all required dependencies
+8. Setup complete!
 
 # How to use? 
 1. Get your openvsp geometry ready
@@ -63,6 +64,7 @@ Integrate a direct topic plugin for Gazebo, building a direct a flight sim direc
 6. After solver is complete, run Flight_Calc.ipynb to reveal the simulation result
 7. chmod +x gz_px4_launch.sh
 8. Run ./gz_px4_launch.sh, it should open up the simulation environment (I will include the installation steps in the future)
+https://youtu.be/k7GOzeA1epw
 
 # Disclaimer:
 
