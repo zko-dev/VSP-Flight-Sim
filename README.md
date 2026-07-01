@@ -64,7 +64,7 @@ Integrate a direct topic plugin for Gazebo, building a direct a flight sim direc
 6. After solver is complete, run Flight_Calc.ipynb to reveal the simulation result
 7. chmod +x gz_px4_launch.sh
 8. Run ./gz_px4_launch.sh, it should open up the simulation environment (I will include the installation steps in the future)
-https://youtu.be/k7GOzeA1epw
+[![Watch the video](https://img.youtube.com/vi/VIDEO_ID/0.jpg)](https://youtu.be/k7GOzeA1epw)
 
 # Disclaimer:
 
