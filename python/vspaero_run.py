@@ -231,7 +231,7 @@ def read_latest_polar_row():
 #setup batch run:
 def main():
     case_num = 1
-    regenerate_degen_geom()
+    #regenerate_degen_geom()
     results = []
     for delta_e in ELEVATOR_SWEEP:
         for delta_a in AILERON_SWEEP:
