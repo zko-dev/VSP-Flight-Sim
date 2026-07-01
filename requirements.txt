@@ -21,3 +21,4 @@ pandas
 plotly
 jupyterlab
 ipywidgets
+pyxfoil
