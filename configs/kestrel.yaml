@@ -1,0 +1,35 @@
+name: Kestrel
+
+mass_kg: 1.800
+sref_m2: 0.1875
+rho: 1.225
+
+aux_power_W: 10.0
+eta_prop: 0.75
+eta_motor: 0.85
+eta_esc: 0.95
+
+cg_m:
+  x: 0.032
+  y: 0.0
+  z: 0.007
+
+battery:
+  voltage_V: 14.8
+  capacity_Ah: 8.4
+  usable_fraction: 0.8
+
+propulsion:
+  num_motors: 4
+  aux_power_W: 10
+  motor_test_csv: data/eco2_2807_1500kv_8x6.csv
+
+control_limits:
+  elevator_min_deg: -20
+  elevator_max_deg: 40
+  aileron_min_deg: -20
+  aileron_max_deg: 20
+
+vsp:
+  file: OpenVSP/Aircraft.vsp3
+  case_name: Aircraft

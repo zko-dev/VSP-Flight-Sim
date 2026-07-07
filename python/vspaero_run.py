@@ -1,8 +1,6 @@
-import openvsp_config
-openvsp_config.LOAD_GRAPHICS = False
-openvsp_config.LOAD_FACADE = False
-
-import openvsp as vsp
+from openvsp_path import get_vsp, get_vspaero_exe
+vsp = get_vsp()
+VSPAERO_EXE = get_vspaero_exe()
 from pathlib import Path
 import subprocess
 import pandas as pd
@@ -12,41 +10,96 @@ start_time = time.perf_counter()
 
 import shutil
 
-ROOT = Path(__file__).resolve().parent.parent / "OpenVSP"
-vsp_file = ROOT / "Aircraft.vsp3"
+from itertools import product
 
-vsp.ClearVSPModel()
-vsp.ReadVSPFile(str(vsp_file))
-vsp.Update()
+ANALYSIS_MODE = "alpha_elevator"
 
-analysis_name = "VSPAEROSweep"
-vsp.SetAnalysisInputDefaults(analysis_name)
-vsp.PrintAnalysisInputs(analysis_name)
+def initialize_vsp_model(vsp_file):
+    vsp.ClearVSPModel()
+    vsp.ReadVSPFile(str(vsp_file))
+    vsp.Update()
+    analysis_name = "VSPAEROSweep"
+    vsp.SetAnalysisInputDefaults(analysis_name)
+    vsp.PrintAnalysisInputs(analysis_name)
 
 #Run sim
 print("Running vspaero_run.py...")
+ROOT = Path(__file__).resolve().parent.parent / "OpenVSP"
 CASE_Name = "Aircraft"
-VSPAERO_EXE = "/Applications/OpenVSP.app/Contents/Resources/vspaero"
-OMP_THREADS = 8 #Bump this up if computer is good
+vsp_file = ROOT / f"{CASE_Name}.vsp3"
+
+OMP_THREADS = 8
 NUM_WAKE_NODES = 16
 NUM_WAKE_ITERS = 8
+CONVERGENCE_TARGET = 1e3
 
-ALPHA_SWEEP = [-8,-6,-4,-2,0,2,4,6,8]
-BETA_SWEEP = [0]
-ELEVATOR_SWEEP = [0,20,40] #positive is nose up
-#ELEVATOR_SWEEP = [20]
-AILERON_SWEEP = [0] #positive is nose up
+BATCH_PRESETS = {
+    "alpha_elevator": {
+        "alpha": [-8,-6,-4,-2,0,2,4,6,8],
+        "beta": [0],
+        "elevator": [-40,-20,-10,-5,0,5,10,20,40],
+        "aileron": [0],
+        "mach": [0.05],
+        "xcg": [0.032],
+        "ycg": [0.0],
+        "zcg": [0.007],
+        "tag": "alpha_elevator",
+    },
 
-#V_flight = np.array([30,60,90]) #kmh
-#MACH_SWEEP = (V_flight/(3.6*340)).astype(int)
-#MACH_SWEEP = [0.03,0.05,0.07]
-MACH_SWEEP = [0.05]
-#XCG_SWEEP = [0.032, 0.036, 0.045, 0.05]
-XCG_SWEEP = [0.036]
-YCG = 0.0
-ZCG = 0.007
+    "alpha_xcg": {
+        "alpha": [-8,-6,-4,-2,0,2,4,6,8],
+        "beta": [0],
+        "elevator": [0],
+        "aileron": [0],
+        "mach": [0.05],
+        "xcg": [0.032, 0.036, 0.040, 0.045, 0.050],
+        "ycg": [0.0],
+        "zcg": [0.007],
+        "tag": "alpha_xcg",
+    },
 
-CONVERGENCE_TARGET = 1e+3 #L2 Residual
+    "aileron_sizing": {
+        "alpha": [8,-4,0,4,8],
+        "beta": [0],
+        "elevator": [0],
+        "aileron": [-40,-20,0,20,40],
+        "mach": [0.05],
+        "xcg": [0.032],
+        "ycg": [0.0],
+        "zcg": [0.007],
+        "tag": "aileron_sizing",
+    },
+
+    "elevator_sizing": {
+        "alpha": [-8,-6,-4,-2,0,2,4,6,8],
+        "beta": [0],
+        "elevator": [-40,-20,0,20,40],
+        "aileron": [0],
+        "mach": [0.05],
+        "xcg": [0.032],
+        "ycg": [0.0],
+        "zcg": [0.007],
+        "tag": "elevator_sizing",
+    },
+
+    "airfoil_cg_pitch": {
+        "alpha": [-4,0,4,8],
+        "beta": [0],
+        "elevator": [0,10,20,30,40],
+        "aileron": [0],
+        "mach": [0.05],
+        "xcg": [0.032, 0.036, 0.040, 0.045, 0.050],
+        "ycg": [0.0],
+        "zcg": [0.007],
+        "tag": "airfoil_cg_pitch",
+    },
+}
+FULL_ANALYSIS_SEQUENCE = [
+    "alpha_xcg",
+    "elevator_sizing",
+    "aileron_sizing",
+    "airfoil_cg_pitch",
+]
 
 def patch_control_angles(delta_e_deg, aileron_e_deg):
     vspaero_path = ROOT / f"{CASE_Name}.vspaero"
@@ -72,7 +125,7 @@ def regenerate_degen_geom():
     print("Regenerating DegenGeom...")
     vsp.ExecAnalysis(analysis_name)
 
-def setup_vspaero(alpha_deg, beta_deg, xcg, mach, delta_e_deg=0.0, aileron_e_deg=0.0):
+def setup_vspaero(alpha_deg, beta_deg, xcg, ycg, zcg, mach, delta_e_deg=0.0, aileron_e_deg=0.0):
     vsp.ClearVSPModel()
     vsp.ReadVSPFile(str(vsp_file))
     vsp.Update()
@@ -100,29 +153,31 @@ def setup_vspaero(alpha_deg, beta_deg, xcg, mach, delta_e_deg=0.0, aileron_e_deg
 
     #CG location
     vsp.SetDoubleAnalysisInput(analysis_name, "Xcg", [xcg])
-    vsp.SetDoubleAnalysisInput(analysis_name, "Ycg", [YCG])
-    vsp.SetDoubleAnalysisInput(analysis_name, "Zcg", [ZCG])
+    vsp.SetDoubleAnalysisInput(analysis_name, "Ycg", [ycg])
+    vsp.SetDoubleAnalysisInput(analysis_name, "Zcg", [zcg])
 
     print(f"Running alpha = {alpha_deg} deg, beta = {beta_deg}, elevator = {delta_e_deg}, Aileron={aileron_e_deg}")
     vsp.ExecAnalysis(analysis_name)
 
 #L2 Residual convergence target
 def check_l2_residual():
-    history_path = ROOT / f"{CASE_Name}.history"
-    if not history_path.exists():
-        raise FileNotFoundError(f"Missing history file: {history_path}")
+    history_files = list(ROOT.glob(f"{CASE_Name}.history"))
+    if not history_files:
+        print(f"History file not found: {CASE_Name}.history")
+        return np.nan
+    history_path = max(history_files, key=lambda p: p.stat().st_mtime)
+
     residuals = []
     for line in history_path.read_text().splitlines():
         parts = line.split()
         for p in parts:
             try:
-                val = float(p)
-                residuals.append(val)
+                residuals.append(float(p))
             except ValueError:
                 pass
 
     if not residuals:
-        raise RuntimeError(f"No numeric residual data")
+        raise RuntimeError(f"No numeric residual data in {history_path}")
     final_residual = abs(residuals[-1])
     print(f"L2 residual: {final_residual:.3e}")
     if final_residual > CONVERGENCE_TARGET:
@@ -229,56 +284,87 @@ def read_latest_polar_row():
     }
 
 #setup batch run:
-def main():
-    case_num = 1
-    #regenerate_degen_geom()
+def run_batch(batch):
     results = []
-    for delta_e in ELEVATOR_SWEEP:
-        for delta_a in AILERON_SWEEP:
-            for alpha in ALPHA_SWEEP:
-                for beta in BETA_SWEEP:
-                    for xcg in XCG_SWEEP:
-                        for mach in MACH_SWEEP:
-                            """
-                            src = ROOT / "Aircraft.case.1.quad.1.dat"
-                            dst = ROOT / f"Aircraft.case.{case_num}.quad.1.dat"
-                            if src.exists():
-                                shutil.copy2(src,dst)
-                            case_num += 1
-                            SAFE_DIR = ROOT.parent / "quad_backup"
-                            SAFE_DIR.mkdir(exist_ok=True)
-                            for f in ROOT.glob("Aircraft.case.*.quad.*.dat"):
-                                shutil.copy2(f,SAFE_DIR/f.name)
-                            """
-                            
-                            setup_vspaero(alpha, beta, xcg, mach)
-                            patch_control_angles(delta_e,delta_a) #Overwrites stock .vspaero
-                            run_vspaero()
-                            residual = check_l2_residual()
 
-                            #save additional data to .csv
-                            data = read_latest_polar_row()
-                            data["delta_e_deg"] = delta_e
-                            data["aileron_e_deg"] = delta_a
-                            data["alpha_commanded"] = alpha
-                            data["beta_commanded"] = beta
-                            data["xcg"] = xcg
-                            results.append(data)
-    """
-    for f in SAFE_DIR.glob("Aircraft.case.*.quad.*.dat"):
-        shutil.copy2(f,ROOT / f.name)
-    """
+    for delta_e, delta_a, alpha, beta, xcg, ycg, zcg, mach in product(
+        batch["elevator"],
+        batch["aileron"],
+        batch["alpha"],
+        batch["beta"],
+        batch["xcg"],
+        batch["ycg"],
+        batch["zcg"],
+        batch["mach"],
+    ):
+        setup_vspaero(alpha, beta, xcg, ycg, zcg, mach)
+        patch_control_angles(delta_e, delta_a)
+        run_vspaero()
+        residual = check_l2_residual()
 
-    df = pd.DataFrame(results)
+        data = read_latest_polar_row()
+        data["analysis_tag"] = batch["tag"]
+        data["delta_e_deg"] = delta_e
+        data["aileron_e_deg"] = delta_a
+        data["alpha_commanded"] = alpha
+        data["beta_commanded"] = beta
+        data["xcg"] = xcg
+        data["mach_commanded"] = mach
+        data["l2_residual"] = residual
+
+        results.append(data)
+
+    return pd.DataFrame(results)
+
+
+def main(run_name="test"):
+    print("Running vspaero_run.py...")
     output_dir = ROOT.parent / "output"
     output_dir.mkdir(exist_ok=True)
+    initialize_vsp_model(vsp_file)
 
-    df.to_csv(output_dir / "vsp_aero_results.csv", index=False)
+
+    if ANALYSIS_MODE == "full":
+        all_dfs = []
+
+        for mode in FULL_ANALYSIS_SEQUENCE:
+            print(f"\n=== Running batch: {mode} ===")
+            batch = BATCH_PRESETS[mode]
+            df = run_batch(batch)
+
+            batch_output = output_dir / f"vsp_aero_results_{mode}_{run_name}.csv"
+            df.to_csv(batch_output, index=False)
+            all_dfs.append(df)
+
+        df_all = pd.concat(all_dfs, ignore_index=True)
+        df_all.to_csv(output_dir / "vsp_aero_results_full.csv", index=False)
+
+    else:
+        batch = BATCH_PRESETS[ANALYSIS_MODE]
+        df = run_batch(batch)
+        df.to_csv(output_dir / f"vsp_aero_results_{ANALYSIS_MODE}.csv", index=False)
+
+def run_vspaero_analysis(aircraft=None, mode="full", run_name="test"):
+    global ANALYSIS_MODE
+    ANALYSIS_MODE = mode
+    start_time = time.perf_counter()
+    main(run_name=run_name)
+    elapsed_time = time.perf_counter() - start_time
+    print(f"vspaero_run.py completed in {elapsed_time:.2f} seconds")
+    output_dir = ROOT.parent / "output"
+    if mode == "full":
+        return output_dir / "vsp_aero_results_full.csv"
+    else:
+        batch = BATCH_PRESETS[ANALYSIS_MODE]
+        df = run_batch(batch)
+
+        named_output = output_dir / f"vsp_aero_results_{ANALYSIS_MODE}_{run_name}.csv"
+        latest_output = output_dir / f"vsp_aero_results_{ANALYSIS_MODE}_latest.csv"
+
+        df.to_csv(named_output, index=False)
+        df.to_csv(latest_output, index=False)
+        return output_dir / f"vsp_aero_results_{ANALYSIS_MODE}_latest.csv"
 
 #guards against accidental run during import
 if __name__ == "__main__":
-    main()
-
-finish_time = time.perf_counter()
-elapsed_time = finish_time - start_time
-print(f"vspaero_run.py completed in {elapsed_time:.2f} seconds")
+    run_vspaero_analysis(mode=ANALYSIS_MODE)

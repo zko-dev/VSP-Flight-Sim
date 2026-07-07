@@ -6,7 +6,8 @@ import openvsp_config
 openvsp_config.LOAD_GRAPHICS = False
 openvsp_config.LOAD_FACADE = False
 
-import openvsp as vsp
+from openvsp_path import get_vsp
+vsp = get_vsp()
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 

@@ -22,3 +22,5 @@ plotly
 jupyterlab
 ipywidgets
 pyxfoil
+pyyaml
+dash

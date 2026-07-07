@@ -1,6 +1,7 @@
 #!/bin/bash
 
-/opt/homebrew/bin/python3.13 -m venv venvsource venv/bin/activate
+/opt/homebrew/bin/python3.13 -m 
+venv venvsource venv/bin/activate
 python --version
 
 echo "upgrading pip..."
