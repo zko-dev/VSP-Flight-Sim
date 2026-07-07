@@ -21,6 +21,7 @@ Custom plotting tool using plotly python, we can automate a full aircraft analys
 ![Batch_summary](/Media/Batch_summary.png)
 ![3D_Plot_example](/Media/3D_Plot_example.png)
 ![Trimmed_elevator](/Media/Trimmed_elevator.png)
+![Drag_polar](/Media/Drag_polar_cases.png)
 ![Trimmed_range](/Media/Trimmed_range.png)
 
 For aircraft prototyping:
