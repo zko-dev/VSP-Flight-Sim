@@ -2,8 +2,8 @@
 OpenVSP driven aircraft analysis tool &amp; gazebo SITL flight sim.
 
 # Description
-Terminal based code package that allows direct control of VSPAero’s solver ranging from scheduled batch sweeps to turn-based geometric modification
-![cfd](/output/cfd.png)
+This is a scripting based VSPAero wrapper that allows extended/direct control of the solver bypassing the GUI. Allows you to schedule batch sweeps according to different geometric modifications including airfoil comparison studies, parametric wing modifications and ability to simulate stability given varying CG locations.
+![cfd](/Media/cfd.png)
 
 Broken into 3 major components: 
 1. OpenVSP itself <- takes user defined wing geom, control surface definitions.
@@ -16,32 +16,22 @@ By moving from the GUI to script, we can significantly speeds up computation lab
 
 For research:
 CFD Result still viewable in VSPAero GUI
-Custom plotting tool using plotly python, we can automate a full aircraft analysis if scripted correctly to collect an aircraft’s stability via alpha, beta sweep -> Trim model through 3D plot -> CL,CD at different flying conditions and therefore infer it’s flight range.
+Custom plotting tool using plotly python, we can automate a full aircraft analysis if scripted correctly to collect an aircraft’s stability via alpha, elevator sweep -> interpolate trimmed condition at CMy=0 -> identifying CL_req and its associated CD at different flying velocities and therefore infer it’s flight range.
 
-![Plot_example](/output/Plot_example.png)
-![Plot_example_2](/output/Plot_example_2.png)
+![Batch_summary](/Media/Batch_summary.png)
+![3D_Plot_example](/Media/3D_Plot_example.png)
+![Trimmed_elevator](/Media/Trimmed_elevator.png)
+![Trimmed_range](/Media/Trimmed_range.png)
 
 For aircraft prototyping:
 Creates a KSP-like environment for rapid iterative design, allows designer to grasp a tangible feel of the aircraft stability behavior before diving into optimization.
 
-![px4-gazebo](/output/px4-gazebo.png)
+![px4-gazebo](/Media/px4-gazebo.png)
 https://youtu.be/vLZKRHpSPtk
 ^Idea is to allow you, the user, to plug in a remote and fly in the sim!
 
 # To Do:
 At the moment, only run_sim.sh is fully setup. Slowly working on the gazebo topics and degenGeom model import. Currently just running PX4_GZ_HEADLESS=0 make px4_sitl gz_tiltrotor
-
-Verified sweeping variables:
-- CG
-- Alpha
-- Beta
-- Elevator
-- Aileron
-- Mach sweep
-
-Need to verify:
-- Re
-- Airfoil geometric comparison
 
 Integrate a direct topic plugin for Gazebo, building a direct a flight sim directly with openvsp geometry and solver result to simulate flight stability & behavior. 
 
