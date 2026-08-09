@@ -1,11 +1,11 @@
 Sref = 0.18657499999999999 
-Cref = 0.23281755126482356 
+Cref = 0.23273934761978787 
 Bref = 0.995 
 X_cg = 0.032000000000000001 
 Y_cg = 0 
 Z_cg = 0.0070000000000000001 
 Mach = 0.050000000000000003 
-AoA = 8 
+AoA = -2 
 Beta = 0 
 ReCref = 200000 
 Vinf = 16.600000000000001 
@@ -36,7 +36,7 @@ NumberOfControlGroups = 2
 Ruddervon
 VTail_Surf0_Ruddervon,VTail_Surf1_Ruddervon
 -1, 1
-40.000
+-20.000
 Aileron
 WingGeom_Surf0_Aileron,WingGeom_Surf1_Aileron
 1, 1

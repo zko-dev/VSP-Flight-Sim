@@ -1,11 +1,18 @@
 import pandas as pd
 import numpy as np
 
-def compute_range_table(aircraft,trim_table):
+def compute_range_table(aircraft, trim_table):
+    if trim_table.empty:
+        raise ValueError("trim_table is empty")
+
+    sref_m2 = float(trim_table["sref_m2"].iloc[0])
+    rho = float(trim_table["rho"].iloc[0])
+
+    mass_kg = aircraft["mass_kg"]
     df = trim_table.copy()
 
-    rho = aircraft["rho"]
-    sref_m2 = aircraft["sref_m2"]
+    rho = trim_table["rho"].iloc[0]
+    sref_m2 = trim_table["sref_m2"].iloc[0]
 
     eta_prop = aircraft["eta_prop"]
     eta_motor = aircraft["eta_motor"]

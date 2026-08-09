@@ -1,18 +1,34 @@
 name: Kestrel
 
 mass_kg: 1.800
-sref_m2: 0.1875
-rho: 1.225
+
+vsp:
+  file: OpenVSP/Aircraft.vsp3
+  case_name: Aircraft
+  aero_file: OpenVSP/Aircraft.vspaero
+
+# Override values if desired.
+# If null, values are read from the VSPAERO file.
+reference_geometry:
+  sref_m2: null
+  cref_m: null
+  bref_m: null
+
+# Override CG if desired.
+# If null, values are read from the VSPAERO file.
+cg_m:
+  x: null
+  y: null
+  z: null
+
+# Override density if desired.
+# If null, use the density stored in the VSPAERO case.
+rho: null
 
 aux_power_W: 10.0
 eta_prop: 0.75
 eta_motor: 0.85
 eta_esc: 0.95
-
-cg_m:
-  x: 0.032
-  y: 0.0
-  z: 0.007
 
 battery:
   voltage_V: 14.8
@@ -24,12 +40,78 @@ propulsion:
   aux_power_W: 10
   motor_test_csv: data/eco2_2807_1500kv_8x6.csv
 
-control_limits:
-  elevator_min_deg: -20
-  elevator_max_deg: 40
-  aileron_min_deg: -20
-  aileron_max_deg: 20
+vspaero:
+  analysis_mode: alpha_elevator
 
-vsp:
-  file: OpenVSP/Aircraft.vsp3
-  case_name: Aircraft
+  omp_threads: 8
+  num_wake_nodes: 16
+  num_wake_iters: 8
+  convergence_target: 1000
+
+  batch_presets:
+    alpha_elevator:
+      alpha: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
+      beta: [0]
+      elevator: [-40, -20, -10, -5, 0, 5, 10, 20, 40]
+      aileron: [0]
+      mach: [0.05]
+      xcg: [0.032]
+      ycg: [0.0]
+      zcg: [0.007]
+      tag: alpha_elevator
+
+    alpha_xcg:
+      alpha: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
+      beta: [0]
+      elevator: [0]
+      aileron: [0]
+      mach: [0.05]
+      xcg: [0.032, 0.036, 0.040, 0.045, 0.050]
+      ycg: [0.0]
+      zcg: [0.007]
+      tag: alpha_xcg
+
+    aileron_sizing:
+      alpha: [8, -4, 0, 4, 8]
+      beta: [0]
+      elevator: [0]
+      aileron: [-40, -20, 0, 20, 40]
+      mach: [0.05]
+      xcg: [0.032]
+      ycg: [0.0]
+      zcg: [0.007]
+      tag: aileron_sizing
+
+    elevator_sizing:
+      alpha: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
+      beta: [0]
+      elevator: [-40, -20, 0, 20, 40]
+      aileron: [0]
+      mach: [0.05]
+      xcg: [0.032]
+      ycg: [0.0]
+      zcg: [0.007]
+      tag: elevator_sizing
+
+    airfoil_cg_pitch:
+      alpha: [-4, 0, 4, 8]
+      beta: [0]
+      elevator: [0, 10, 20, 30, 40]
+      aileron: [0]
+      mach: [0.05]
+      xcg: [0.032, 0.036, 0.040, 0.045, 0.050]
+      ycg: [0.0]
+      zcg: [0.007]
+      tag: airfoil_cg_pitch
+
+  full_analysis_sequence:
+    - alpha_xcg
+    - elevator_sizing
+    - aileron_sizing
+    - airfoil_cg_pitch
+
+control_limits:
+  elevator_min_deg: -40
+  elevator_max_deg: 40
+  aileron_min_deg: -40
+  aileron_max_deg: 40

@@ -1,12 +1,52 @@
 import pandas as pd
 import numpy as np
 
+from pathlib import Path
+
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import least_squares
 
-def get_aircraft_value(aircraft, key, default = None):
-    #Parse yaml later
-    return aircraft.get(key, default)
+def get_reference_value(yaml_value, vsp_value):
+    if yaml_value is None:
+        return vsp_value
+    return yaml_value
+
+def parse_vspaero_header(vspaero_file):
+    values = {}
+
+    keys = {
+        "Sref": "sref_m2",
+        "Cref": "cref_m",
+        "Bref": "bref_m",
+        "X_cg": "cg_x_m",
+        "Y_cg": "cg_y_m",
+        "Z_cg": "cg_z_m",
+        "Mach": "mach",
+        "Vinf": "vinf_mps",
+        "Rho": "rho",
+        "AoA": "alpha_deg",
+        "Beta": "beta_deg",
+        "ReCref": "re_cref",
+    }
+
+    with open(vspaero_file, "r") as f:
+        for line in f:
+            line = line.strip()
+
+            if "=" not in line:
+                continue
+
+            left, right = line.split("=", 1)
+            left = left.strip()
+            right = right.strip()
+
+            if left in keys:
+                try:
+                    values[keys[left]] = float(right)
+                except ValueError:
+                    pass
+
+    return values
 
 def velocity_grid_kmh(v_min=30, v_max=120, step = 1):
     return np.arange(v_min, v_max + step, step)
@@ -24,12 +64,62 @@ def compute_cl_required(mass_kg, sref_m2, velocity_kmh, rho=1.225):
         "CL_required": CL_required,
     })
 
+def get_elevator_limits(aircraft, de_grid):
+    yaml_de_min = aircraft["control_limits"]["elevator_min_deg"]
+    yaml_de_max = aircraft["control_limits"]["elevator_max_deg"]
+
+    csv_de_min = de_grid.min()
+    csv_de_max = de_grid.max()
+
+    de_min = max(csv_de_min, yaml_de_min)
+    de_max = min(csv_de_max, yaml_de_max)
+
+    return de_min, de_max
+
 def build_trim_table(aircraft, aero_csv):
     aero_df = pd.read_csv(aero_csv)
+    
+    root = Path(__file__).resolve().parent.parent
+
+    vspaero_file = root / aircraft["vsp"]["aero_file"]
+    vsp_info = parse_vspaero_header(vspaero_file)
 
     mass_kg = aircraft["mass_kg"]
-    sref_m2 = aircraft["sref_m2"]
-    rho = aircraft["rho"]
+
+    sref_m2 = get_reference_value(
+        aircraft["reference_geometry"]["sref_m2"],
+        vsp_info["sref_m2"],
+    )
+
+    rho = get_reference_value(
+        aircraft["rho"],
+        vsp_info["rho"],
+    )
+
+    cref_m = get_reference_value(
+    aircraft["reference_geometry"]["cref_m"],
+    vsp_info["cref_m"],
+    )
+
+    bref_m = get_reference_value(
+        aircraft["reference_geometry"]["bref_m"],
+        vsp_info["bref_m"],
+    )
+
+    cg_x_m = get_reference_value(
+        aircraft["cg_m"]["x"],
+        vsp_info["cg_x_m"],
+    )
+
+    cg_y_m = get_reference_value(
+        aircraft["cg_m"]["y"],
+        vsp_info["cg_y_m"],
+    )
+
+    cg_z_m = get_reference_value(
+        aircraft["cg_m"]["z"],
+        vsp_info["cg_z_m"],
+    )
 
     velocity_kmh = velocity_grid_kmh(30, 120, 1)
 
@@ -40,6 +130,14 @@ def build_trim_table(aircraft, aero_csv):
         rho=rho,
     )
 
+    trim_df["mass_kg"] = mass_kg
+    trim_df["sref_m2"] = sref_m2
+    trim_df["cref_m"] = cref_m
+    trim_df["bref_m"] = bref_m
+    trim_df["cg_x_m"] = cg_x_m
+    trim_df["cg_y_m"] = cg_y_m
+    trim_df["cg_z_m"] = cg_z_m
+    trim_df["rho"] = rho
     trim_df["alpha_trim_deg"] = np.nan
     trim_df["delta_e_trim_deg"] = np.nan
     trim_df["CL_trim"] = np.nan
@@ -47,12 +145,22 @@ def build_trim_table(aircraft, aero_csv):
     trim_df["CM_trim"] = np.nan
     trim_df["L_D_trim"] = np.nan
     trim_df["trim_valid"] = False
+    trim_df["Cma_per_deg"] = np.nan
+    trim_df["Cma_per_rad"] = np.nan
+    trim_df["Cmde_per_deg"] = np.nan
+    trim_df["Cmde_per_rad"] = np.nan
+    trim_df["elevator_margin_up_deg"] = np.nan
+    trim_df["elevator_margin_down_deg"] = np.nan
+    trim_df["elevator_authority_score"] = np.nan
+    trim_df["Cma_fit_points"] = np.nan
+    trim_df["Cmde_fit_points"] = np.nan
 
     previous_solution = None
     for i, row in trim_df.iterrows():
         result = interp_trim_at_cl(
             aero_df,
             row["CL_required"],
+            aircraft=aircraft,
             previous_solution=previous_solution,
         )
 
@@ -61,6 +169,17 @@ def build_trim_table(aircraft, aero_csv):
 
         for key, value in result.items():
             trim_df.loc[i, key] = value
+
+        derivs = stability_derivatives_at_trim(
+            aero_df,
+            result["alpha_trim_deg"],
+            result["delta_e_trim_deg"],
+            aircraft=aircraft,
+        )
+
+        if derivs is not None:
+            for key, value in derivs.items():
+                trim_df.loc[i, key] = value
 
         previous_solution = [
             result["alpha_trim_deg"],
@@ -89,13 +208,13 @@ def make_surface_interpolator(aero_df, value_col):
 
     return interp, alpha_grid, de_grid
 
-def interp_trim_at_cl(aero_df, cl_req, previous_solution=None):
+def interp_trim_at_cl(aero_df, cl_req, aircraft, previous_solution=None):
     cl_interp, alpha_grid, de_grid = make_surface_interpolator(aero_df, "CLtot")
     cm_interp, _, _ = make_surface_interpolator(aero_df, "CMytot")
     cd_interp, _, _ = make_surface_interpolator(aero_df, "CDtot")
 
     alpha_min, alpha_max = alpha_grid.min(), alpha_grid.max()
-    de_min, de_max = de_grid.min(), de_grid.max()
+    de_min, de_max = get_elevator_limits(aircraft, de_grid)
 
     def residual(x):
         alpha, de = x
@@ -113,7 +232,7 @@ def interp_trim_at_cl(aero_df, cl_req, previous_solution=None):
         ]
 
     if previous_solution is None:
-        # Start from closest raw CL point
+    # Start from closest raw CL point
         idx = (aero_df["CLtot"] - cl_req).abs().idxmin()
         x0 = np.array([
             aero_df.loc[idx, "alpha"],
@@ -121,6 +240,10 @@ def interp_trim_at_cl(aero_df, cl_req, previous_solution=None):
         ])
     else:
         x0 = np.array(previous_solution)
+
+    x0[0] = np.clip(x0[0], alpha_min, alpha_max)
+    x0[1] = np.clip(x0[1], de_min, de_max)
+
 
     sol = least_squares(
         residual,
@@ -154,4 +277,88 @@ def interp_trim_at_cl(aero_df, cl_req, previous_solution=None):
         "CM_trim": cm_trim,
         "L_D_trim": cl_trim / cd_trim if cd_trim > 0 else np.nan,
         "trim_valid": True,
+    }
+
+def stability_derivatives_at_trim(
+    aero_df,
+    alpha_trim,
+    de_trim,
+    aircraft,
+):
+    cm_interp, alpha_grid, de_grid = make_surface_interpolator(
+        aero_df,
+        "CMytot",
+    )
+
+    de_min, de_max = get_elevator_limits(aircraft, de_grid)
+
+    # ---------------------------------------------------------
+    # Cm_alpha: fit CM versus alpha across the full alpha sweep
+    # while holding elevator fixed at the trimmed deflection.
+    # ---------------------------------------------------------
+    alpha_points = np.column_stack(
+        [
+            alpha_grid,
+            np.full(len(alpha_grid), de_trim),
+        ]
+    )
+
+    cm_alpha_values = cm_interp(alpha_points)
+
+    valid_alpha = np.isfinite(cm_alpha_values)
+
+    if valid_alpha.sum() < 2:
+        return None
+
+    cma_per_deg, cma_intercept = np.polyfit(
+        alpha_grid[valid_alpha],
+        cm_alpha_values[valid_alpha],
+        1,
+    )
+
+    # ---------------------------------------------------------
+    # Cm_delta_e: fit CM versus elevator across the full usable
+    # elevator sweep while holding alpha fixed at trim.
+    # ---------------------------------------------------------
+    usable_de_grid = de_grid[
+        (de_grid >= de_min)
+        & (de_grid <= de_max)
+    ]
+
+    de_points = np.column_stack(
+        [
+            np.full(len(usable_de_grid), alpha_trim),
+            usable_de_grid,
+        ]
+    )
+
+    cm_de_values = cm_interp(de_points)
+
+    valid_de = np.isfinite(cm_de_values)
+
+    if valid_de.sum() < 2:
+        return None
+
+    cmde_per_deg, cmde_intercept = np.polyfit(
+        usable_de_grid[valid_de],
+        cm_de_values[valid_de],
+        1,
+    )
+
+    return {
+        "Cma_per_deg": cma_per_deg,
+        "Cma_per_rad": cma_per_deg * 180.0 / np.pi,
+
+        "Cmde_per_deg": cmde_per_deg,
+        "Cmde_per_rad": cmde_per_deg * 180.0 / np.pi,
+
+        "Cma_fit_points": int(valid_alpha.sum()),
+        "Cmde_fit_points": int(valid_de.sum()),
+
+        "elevator_margin_up_deg": de_trim - de_min,
+        "elevator_margin_down_deg": de_max - de_trim,
+        "elevator_authority_score": min(
+            de_trim - de_min,
+            de_max - de_trim,
+        ),
     }

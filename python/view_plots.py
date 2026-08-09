@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import numpy as np
 
 from dash import Dash, dcc, html, Input, Output
 
@@ -187,6 +188,11 @@ def find_first_existing_column(df, candidates):
 def case_summary_series(df, case_name):
     valid = valid_trim_df(df)
 
+    # Representative trimmed point
+    best_trim = None
+    if not valid.empty and "L_D_trim" in valid.columns:
+        best_trim = valid.loc[valid["L_D_trim"].idxmax()]
+
     if valid.empty:
         return pd.Series(name=case_name, dtype="object")
 
@@ -226,6 +232,15 @@ def case_summary_series(df, case_name):
 
     return pd.Series(
         {
+            "Weight [kg]": valid["mass_kg"].iloc[0] if "mass_kg" in valid else np.nan,
+            "Xcg [m]": valid["cg_x_m"].iloc[0] if "cg_x_m" in valid else np.nan,
+            "Sref [m²]": valid["sref_m2"].iloc[0] if "sref_m2" in valid else np.nan,
+
+            "Cmα [1/rad]":
+                best_trim["Cma_per_rad"]
+                if best_trim is not None and "Cma_per_rad" in best_trim
+                else np.nan,
+
             "Best range": fmt(best_range, "range_km"),
             "Best endurance": fmt(best_endurance, "endurance_min"),
             "Best L/D": fmt(best_ld, "L_D_trim"),

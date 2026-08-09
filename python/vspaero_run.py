@@ -8,11 +8,17 @@ import numpy as np
 import time
 start_time = time.perf_counter()
 
+import yaml
+from trim import parse_vspaero_header
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_PATH = PROJECT_ROOT / "configs" / "kestrel.yaml"
+with open(CONFIG_PATH, "r") as f:
+    AIRCRAFT = yaml.safe_load(f)
+VSPAERO_CONFIG = AIRCRAFT["vspaero"]
+
 import shutil
 
 from itertools import product
-
-ANALYSIS_MODE = "alpha_elevator"
 
 def initialize_vsp_model(vsp_file):
     vsp.ClearVSPModel()
@@ -24,82 +30,17 @@ def initialize_vsp_model(vsp_file):
 
 #Run sim
 print("Running vspaero_run.py...")
-ROOT = Path(__file__).resolve().parent.parent / "OpenVSP"
-CASE_Name = "Aircraft"
-vsp_file = ROOT / f"{CASE_Name}.vsp3"
+ROOT = PROJECT_ROOT / "OpenVSP"
+CASE_Name = AIRCRAFT["vsp"]["case_name"]
+vsp_file = PROJECT_ROOT / AIRCRAFT["vsp"]["file"]
 
-OMP_THREADS = 8
-NUM_WAKE_NODES = 16
-NUM_WAKE_ITERS = 8
-CONVERGENCE_TARGET = 1e3
-
-BATCH_PRESETS = {
-    "alpha_elevator": {
-        "alpha": [-8,-6,-4,-2,0,2,4,6,8],
-        "beta": [0],
-        "elevator": [-40,-20,-10,-5,0,5,10,20,40],
-        "aileron": [0],
-        "mach": [0.05],
-        "xcg": [0.032],
-        "ycg": [0.0],
-        "zcg": [0.007],
-        "tag": "alpha_elevator",
-    },
-
-    "alpha_xcg": {
-        "alpha": [-8,-6,-4,-2,0,2,4,6,8],
-        "beta": [0],
-        "elevator": [0],
-        "aileron": [0],
-        "mach": [0.05],
-        "xcg": [0.032, 0.036, 0.040, 0.045, 0.050],
-        "ycg": [0.0],
-        "zcg": [0.007],
-        "tag": "alpha_xcg",
-    },
-
-    "aileron_sizing": {
-        "alpha": [8,-4,0,4,8],
-        "beta": [0],
-        "elevator": [0],
-        "aileron": [-40,-20,0,20,40],
-        "mach": [0.05],
-        "xcg": [0.032],
-        "ycg": [0.0],
-        "zcg": [0.007],
-        "tag": "aileron_sizing",
-    },
-
-    "elevator_sizing": {
-        "alpha": [-8,-6,-4,-2,0,2,4,6,8],
-        "beta": [0],
-        "elevator": [-40,-20,0,20,40],
-        "aileron": [0],
-        "mach": [0.05],
-        "xcg": [0.032],
-        "ycg": [0.0],
-        "zcg": [0.007],
-        "tag": "elevator_sizing",
-    },
-
-    "airfoil_cg_pitch": {
-        "alpha": [-4,0,4,8],
-        "beta": [0],
-        "elevator": [0,10,20,30,40],
-        "aileron": [0],
-        "mach": [0.05],
-        "xcg": [0.032, 0.036, 0.040, 0.045, 0.050],
-        "ycg": [0.0],
-        "zcg": [0.007],
-        "tag": "airfoil_cg_pitch",
-    },
-}
-FULL_ANALYSIS_SEQUENCE = [
-    "alpha_xcg",
-    "elevator_sizing",
-    "aileron_sizing",
-    "airfoil_cg_pitch",
-]
+ANALYSIS_MODE = VSPAERO_CONFIG["analysis_mode"]
+OMP_THREADS = VSPAERO_CONFIG["omp_threads"]
+NUM_WAKE_NODES = VSPAERO_CONFIG["num_wake_nodes"]
+NUM_WAKE_ITERS = VSPAERO_CONFIG["num_wake_iters"]
+CONVERGENCE_TARGET = VSPAERO_CONFIG["convergence_target"]
+BATCH_PRESETS = VSPAERO_CONFIG["batch_presets"]
+FULL_ANALYSIS_SEQUENCE = VSPAERO_CONFIG["full_analysis_sequence"]
 
 def patch_control_angles(delta_e_deg, aileron_e_deg):
     vspaero_path = ROOT / f"{CASE_Name}.vspaero"
@@ -112,17 +53,15 @@ def patch_control_angles(delta_e_deg, aileron_e_deg):
             lines[i+3] = f"{aileron_e_deg:.3f}"
     vspaero_path.write_text("\n".join(lines)+"\n")
 
-def regenerate_degen_geom():
+def regenerate_solver_geometry():
     vsp.ClearVSPModel()
     vsp.ReadVSPFile(str(vsp_file))
     vsp.Update()
-    analysis_name = "Aircraft"
+
+    analysis_name = "VSPAEROComputeGeometry"
     vsp.SetAnalysisInputDefaults(analysis_name)
-    vsp.SetComputationFileName(
-        vsp.DEGEN_GEOM_CSV_TYPE, 
-        str(ROOT / f"{CASE_Name}.csv")
-    )
-    print("Regenerating DegenGeom...")
+
+    print("Regenerating VSPAERO solver geometry...")
     vsp.ExecAnalysis(analysis_name)
 
 def setup_vspaero(alpha_deg, beta_deg, xcg, ycg, zcg, mach, delta_e_deg=0.0, aileron_e_deg=0.0):
@@ -303,12 +242,18 @@ def run_batch(batch):
         residual = check_l2_residual()
 
         data = read_latest_polar_row()
+
+        vsp_info = parse_vspaero_header(ROOT / f"{CASE_Name}.vspaero")
+        data.update(vsp_info)
+
         data["analysis_tag"] = batch["tag"]
         data["delta_e_deg"] = delta_e
         data["aileron_e_deg"] = delta_a
         data["alpha_commanded"] = alpha
         data["beta_commanded"] = beta
         data["xcg"] = xcg
+        data["ycg"] = ycg
+        data["zcg"] = zcg
         data["mach_commanded"] = mach
         data["l2_residual"] = residual
 
@@ -322,7 +267,9 @@ def main(run_name="test"):
     output_dir = ROOT.parent / "output"
     output_dir.mkdir(exist_ok=True)
     initialize_vsp_model(vsp_file)
+    initialize_vsp_model(vsp_file)
 
+    regenerate_solver_geometry()
 
     if ANALYSIS_MODE == "full":
         all_dfs = []
@@ -346,24 +293,31 @@ def main(run_name="test"):
 
 def run_vspaero_analysis(aircraft=None, mode="full", run_name="test"):
     global ANALYSIS_MODE
+
     ANALYSIS_MODE = mode
+
     start_time = time.perf_counter()
     main(run_name=run_name)
     elapsed_time = time.perf_counter() - start_time
+
     print(f"vspaero_run.py completed in {elapsed_time:.2f} seconds")
+
     output_dir = ROOT.parent / "output"
+
     if mode == "full":
         return output_dir / "vsp_aero_results_full.csv"
-    else:
-        batch = BATCH_PRESETS[ANALYSIS_MODE]
-        df = run_batch(batch)
 
-        named_output = output_dir / f"vsp_aero_results_{ANALYSIS_MODE}_{run_name}.csv"
-        latest_output = output_dir / f"vsp_aero_results_{ANALYSIS_MODE}_latest.csv"
+    source_output = output_dir / f"vsp_aero_results_{mode}.csv"
+    named_output = output_dir / f"vsp_aero_results_{mode}_{run_name}.csv"
+    latest_output = output_dir / f"vsp_aero_results_{mode}_latest.csv"
 
-        df.to_csv(named_output, index=False)
-        df.to_csv(latest_output, index=False)
-        return output_dir / f"vsp_aero_results_{ANALYSIS_MODE}_latest.csv"
+    if not source_output.exists():
+        raise FileNotFoundError(f"Expected output not found: {source_output}")
+
+    shutil.copy2(source_output, named_output)
+    shutil.copy2(source_output, latest_output)
+
+    return latest_output
 
 #guards against accidental run during import
 if __name__ == "__main__":

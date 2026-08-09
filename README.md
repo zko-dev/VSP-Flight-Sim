@@ -47,7 +47,7 @@ Integrate a direct topic plugin for Gazebo, building a direct a flight sim direc
 8. Setup complete!
 
 # How to use? 
-1. Get your openvsp geometry ready
+1. Get your openvsp aircraft ready
 2. Run "Prep-solver" to parse its geometry
 3. Setup solver config in vspaero_run.py
 4. chmod +x run_sim.sh

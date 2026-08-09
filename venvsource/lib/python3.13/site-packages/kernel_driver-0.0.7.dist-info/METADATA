@@ -1,0 +1,37 @@
+Metadata-Version: 2.1
+Name: kernel-driver
+Version: 0.0.7
+Summary: A Jupyter kernel driver
+Home-page: https://github.com/davidbrochart/kernel_driver
+Author: David Brochart
+Author-email: david.brochart@gmail.com
+License: MIT
+Keywords: jupyter
+Platform: Windows
+Platform: Linux
+Platform: Mac OS X
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pyzmq
+Requires-Dist: python-dateutil
+Requires-Dist: rich
+Provides-Extra: test
+Requires-Dist: types-python-dateutil ; extra == 'test'
+Requires-Dist: xeus-python ; extra == 'test'
+Requires-Dist: ipykernel ; extra == 'test'
+Requires-Dist: akernel ; extra == 'test'
+Requires-Dist: pytest ; extra == 'test'
+Requires-Dist: pytest-asyncio ; extra == 'test'
+Requires-Dist: mypy ; extra == 'test'
+Requires-Dist: flake8 ; extra == 'test'
+Requires-Dist: black ; extra == 'test'
+
+[![Build Status](https://github.com/davidbrochart/kernel_driver/workflows/CI/badge.svg)](https://github.com/davidbrochart/kernel_driver/actions)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+# Kernel driver
+
+A library for executing code in a Jupyter kernel.
+
+

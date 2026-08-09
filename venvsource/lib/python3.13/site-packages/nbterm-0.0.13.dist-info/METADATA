@@ -1,0 +1,90 @@
+Metadata-Version: 2.1
+Name: nbterm
+Version: 0.0.13
+Summary: A tool for viewing, editing and executing Jupyter Notebooks in the terminal
+Home-page: https://github.com/davidbrochart/nbterm.git
+Author: David Brochart
+Author-email: david.brochart@gmail.com
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: prompt-toolkit (>=3.0.16)
+Requires-Dist: typer (>=0.4.0)
+Requires-Dist: pygments
+Requires-Dist: rich
+Requires-Dist: kernel-driver (>=0.0.6)
+Provides-Extra: test
+Requires-Dist: mypy ; extra == 'test'
+Requires-Dist: flake8 ; extra == 'test'
+Requires-Dist: black ; extra == 'test'
+Requires-Dist: pytest ; extra == 'test'
+Requires-Dist: ipykernel ; extra == 'test'
+
+[![Build Status](https://github.com/davidbrochart/nbterm/workflows/CI/badge.svg)](https://github.com/davidbrochart/nbterm/actions)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+# nbterm
+
+Lets you view, edit and execute Jupyter Notebooks in the terminal.
+
+## Install
+
+Using pip:
+
+```
+pip install nbterm
+```
+
+Using conda:
+
+```
+mamba install nbterm -c conda-forge
+```
+
+You will also need a kernel, e.g. `ipykernel` or `xeus-python` for Python, `xeus-cling` for C++.
+
+## Usage
+
+Open an interactive notebook:
+
+```
+$ nbterm my_notebook.ipynb
+```
+
+Run a notebook in batch mode:
+
+```
+$ nbterm --run my_notebook.ipynb
+```
+
+## Key bindings
+
+There are two modes: edit mode, and command mode.
+
+- `enter`: enter the edit mode, allowing to type into the cell.
+- `esc`: exit the edit mode and enter the command mode.
+
+In command mode:
+
+- `up`: select cell above.
+- `down`: select cell below.
+- `ctrl-up`: move cell above.
+- `ctrl-down`: move cell below.
+- `a`: insert cell above.
+- `b`: insert cell below.
+- `x`: cut the cell.
+- `c`: copy the cell.
+- `ctrl-v`: paste cell above.
+- `v`: paste cell below.
+- `o`: set as code cell.
+- `r`: set as raw cell.
+- `m`: set as Markdown cell.
+- `l`: clear cell outputs.
+- `ctrl-e`: run cell.
+- `ctrl-r`: run cell and select below.
+- `ctrl-s`: save.
+- `ctrl-q`: exit.
+- `ctrl-h`: show help.

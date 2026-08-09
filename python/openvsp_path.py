@@ -1,4 +1,4 @@
-# python/openvsp_setup.py
+# python/openvsp_path.py
 
 import os
 import sys
