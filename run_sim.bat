@@ -18,4 +18,7 @@ python --version
 echo Running aircraft study...
 python python\run_study.py
 
+echo Displaying results...
+python python\view_plots.py
+
 pause
