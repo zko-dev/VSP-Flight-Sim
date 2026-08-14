@@ -24,3 +24,4 @@ ipywidgets
 pyxfoil
 pyyaml
 dash
+git-filter-repo
