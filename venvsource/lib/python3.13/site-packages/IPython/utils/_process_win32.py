@@ -13,9 +13,7 @@ from ctypes.wintypes import HLOCAL, LPCWSTR
 from subprocess import STDOUT
 from threading import Thread
 from types import TracebackType
-from typing import List, Optional
 
-from . import py3compat
 from ._process_common import arg_split as py_arg_split
 
 from ._process_common import process_handler, read_no_interrupt
@@ -43,7 +41,7 @@ class AvoidUNCPath:
             os.system(cmd)
     """
 
-    def __enter__(self) -> Optional[str]:
+    def __enter__(self) -> str | None:
         self.path = os.getcwd()
         self.is_unc_path = self.path.startswith(r"\\")
         if self.is_unc_path:
@@ -57,9 +55,9 @@ class AvoidUNCPath:
 
     def __exit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         if self.is_unc_path:
             os.chdir(self.path)
@@ -113,7 +111,7 @@ def _system_body(p: subprocess.Popen[bytes]) -> int:
     return result
 
 
-def system(cmd: str) -> Optional[int]:
+def system(cmd: str) -> int | None:
     """Win32 version of os.system() that works with network shares.
 
     Note that this implementation returns None, as meant for use in IPython.
@@ -127,14 +125,9 @@ def system(cmd: str) -> Optional[int]:
     -------
     int : child process' exit code.
     """
-    # The controller provides interactivity with both
-    # stdin and stdout
-    # import _process_win32_controller
-    # _process_win32_controller.system(cmd)
-
     with AvoidUNCPath() as path:
         if path is not None:
-            cmd = '"pushd %s &&"%s' % (path, cmd)
+            cmd = '"pushd {} &&"{}'.format(path, cmd)
         res = process_handler(cmd, _system_body)
         return res
 
@@ -156,12 +149,12 @@ def getoutput(cmd: str) -> str:
 
     with AvoidUNCPath() as path:
         if path is not None:
-            cmd = '"pushd %s &&"%s' % (path, cmd)
+            cmd = '"pushd {} &&"{}'.format(path, cmd)
         out = process_handler(cmd, lambda p: p.communicate()[0], STDOUT)
 
     if out is None:
         out = b""
-    return py3compat.decode(out)
+    return out.decode(DEFAULT_ENCODING, "replace")
 
 
 try:
@@ -175,7 +168,7 @@ try:
 
     def arg_split(
         commandline: str, posix: bool = False, strict: bool = True
-    ) -> List[str]:
+    ) -> list[str]:
         """Split a command line's arguments in a shell-like manner.
 
         This is a special version for windows that use a ctypes call to CommandLineToArgvW

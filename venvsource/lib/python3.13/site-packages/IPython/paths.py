@@ -1,10 +1,11 @@
 """Find files and directories which IPython uses.
 """
+from __future__ import annotations
+
 import os.path
 import tempfile
 from warnings import warn
 
-import IPython
 from IPython.utils.importstring import import_item
 from IPython.utils.path import (
     get_home_dir,
@@ -47,7 +48,7 @@ def get_ipython_dir() -> str:
                     warn(('Ignoring {0} in favour of {1}. Remove {0} to '
                         'get rid of this message').format(cu(xdg_ipdir), cu(ipdir)))
                 elif os.path.islink(xdg_ipdir):
-                    warn(('{0} is deprecated. Move link to {1} to '
+                    warn(('{} is deprecated. Move link to {} to '
                         'get rid of this message').format(cu(xdg_ipdir), cu(ipdir)))
                 else:
                     ipdir = xdg_ipdir
@@ -56,14 +57,14 @@ def get_ipython_dir() -> str:
 
     if os.path.exists(ipdir) and not _writable_dir(ipdir):
         # ipdir exists, but is not writable
-        warn("IPython dir '{0}' is not a writable location,"
+        warn("IPython dir '{}' is not a writable location,"
                 " using a temp directory.".format(ipdir))
         ipdir = tempfile.mkdtemp()
     elif not os.path.exists(ipdir):
         parent = os.path.dirname(ipdir)
         if not _writable_dir(parent):
             # ipdir does not exist and parent isn't writable
-            warn("IPython parent '{0}' is not a writable location,"
+            warn("IPython parent '{}' is not a writable location,"
                     " using a temp directory.".format(parent))
             ipdir = tempfile.mkdtemp()
         else:
@@ -88,7 +89,7 @@ def get_ipython_cache_dir() -> str:
 
 def get_ipython_package_dir() -> str:
     """Get the base directory where IPython itself is installed."""
-    ipdir = os.path.dirname(IPython.__file__)
+    ipdir = os.path.dirname(__file__)
     assert isinstance(ipdir, str)
     return ipdir
 
@@ -108,7 +109,7 @@ def get_ipython_module_path(module_str):
     return the_path
 
 
-def locate_profile(profile='default'):
+def locate_profile(profile: str = "default") -> str:
     """Find the path to the folder associated with a given profile.
 
     I.e. find $IPYTHONDIR/profile_whatever.
@@ -118,5 +119,5 @@ def locate_profile(profile='default'):
         pd = ProfileDir.find_profile_dir_by_name(get_ipython_dir(), profile)
     except ProfileDirError as e:
         # IOError makes more sense when people are expecting a path
-        raise IOError("Couldn't find profile %r" % profile) from e
+        raise OSError("Couldn't find profile %r" % profile) from e
     return pd.location

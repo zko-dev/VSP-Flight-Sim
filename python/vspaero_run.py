@@ -319,6 +319,10 @@ def run_vspaero_analysis(aircraft=None, mode="full", run_name="test"):
 
     return latest_output
 
+print("VSP exe path:     ", vsp.GetVSPExePath())
+print("VSPAERO path:     ", vsp.GetVSPAEROPath())
+print("VSPAERO found:    ", vsp.CheckForVSPAERO(vsp.GetVSPAEROPath()))
+
 #guards against accidental run during import
 if __name__ == "__main__":
     run_vspaero_analysis(mode=ANALYSIS_MODE)

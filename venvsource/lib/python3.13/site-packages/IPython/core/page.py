@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 Paging capabilities for IPython.core
 
@@ -24,13 +23,12 @@ import subprocess
 from io import UnsupportedOperation
 from pathlib import Path
 
-from IPython import get_ipython
+from IPython.core.getipython import get_ipython
 from IPython.display import display
 from IPython.core.error import TryNext
 from IPython.utils.data import chop
 from IPython.utils.process import system
 from IPython.utils.terminal import get_terminal_size
-from IPython.utils import py3compat
 
 
 def display_page(strng, start=0, screen_lines=25):
@@ -39,7 +37,7 @@ def display_page(strng, start=0, screen_lines=25):
         data = strng
     else:
         if start:
-            strng = u'\n'.join(strng.splitlines()[start:])
+            strng = '\n'.join(strng.splitlines()[start:])
         data = { 'text/plain': strng }
     display(data, raw=True)
 
@@ -89,13 +87,13 @@ def _detect_screen_size(screen_lines_def):
         # curses causes problems on many terminals other than xterm, and
         # some termios calls lock up on Sun OS5.
         return screen_lines_def
-    
+
     try:
         import termios
         import curses
     except ImportError:
         return screen_lines_def
-    
+
     # There is a bug in curses, where *sometimes* it fails to properly
     # initialize, and then after the endwin() call is made, the
     # terminal is left in an unusable state.  Rather than trying to
@@ -107,14 +105,14 @@ def _detect_screen_size(screen_lines_def):
         term_flags = termios.tcgetattr(sys.stdout)
     except termios.error as err:
         # can fail on Linux 2.6, pager_page will catch the TypeError
-        raise TypeError('termios error: {0}'.format(err)) from err
+        raise TypeError(f'termios error: {err}') from err
 
     try:
         scr = curses.initscr()
     except AttributeError:
         # Curses on Solaris may not be complete, so we can't use it there
         return screen_lines_def
-    
+
     screen_lines_real,screen_cols = scr.getmaxyx()
     curses.endwin()
 
@@ -148,7 +146,7 @@ def pager_page(strng, start=0, screen_lines=0, pager_cmd=None) -> None:
     If no system pager works, the string is sent through a 'dumb pager'
     written in python, very simplistic.
     """
-    
+
     # for compatibility with mime-bundle form:
     if isinstance(strng, dict):
         strng = strng['text/plain']
@@ -201,7 +199,7 @@ def pager_page(strng, start=0, screen_lines=0, pager_cmd=None) -> None:
                     os.close(fd)
                     with tmppath.open("wt", encoding="utf-8") as tmpfile:
                         tmpfile.write(strng)
-                        cmd = "%s < %s" % (pager_cmd, tmppath)
+                        cmd = "{} < {}".format(pager_cmd, tmppath)
                     # tmpfile needs to be closed for windows
                     if os.system(cmd):
                         retval = 1
@@ -227,14 +225,13 @@ def pager_page(strng, start=0, screen_lines=0, pager_cmd=None) -> None:
                     pager.write(strng)
                 finally:
                     retval = pager.close()
-            except IOError as msg:  # broken pipe when user quits
+            except OSError as msg:  # broken pipe when user quits
+                # msg.args == (32, 'Broken pipe') for that case; other
+                # OSErrors are strange problems, sometimes seen in Win2k/cygwin
                 if msg.args == (32, 'Broken pipe'):
                     retval = None
                 else:
                     retval = 1
-            except OSError:
-                # Other strange problems, sometimes seen in Win2k/cygwin
-                retval = 1
         if retval is not None:
             page_dumb(strng,screen_lines=screen_lines)
 
@@ -260,7 +257,7 @@ def page(data, start: int = 0, screen_lines: int = 0, pager_cmd=None):
             return
         except TryNext:
             pass
-    
+
     # fallback on default pager
     return pager_page(data, start, screen_lines, pager_cmd)
 
@@ -274,14 +271,14 @@ def page_file(fname, start=0, pager_cmd=None):
 
     try:
         if os.environ['TERM'] in ['emacs','dumb']:
-            raise EnvironmentError
+            raise OSError
         system(pager_cmd + ' ' + fname)
-    except:
+    except Exception:
         try:
             if start > 0:
                 start -= 1
             page(open(fname, encoding="utf-8").read(), start)
-        except:
+        except Exception:
             print('Unable to show file',repr(fname))
 
 
@@ -298,12 +295,12 @@ def get_pager_cmd(pager_cmd=None):
     if pager_cmd is None:
         try:
             pager_cmd = os.environ['PAGER']
-        except:
+        except KeyError:
             pager_cmd = default_pager_cmd
-    
+
     if pager_cmd == 'less' and '-r' not in os.environ.get('LESS', '').lower():
         pager_cmd += ' -R'
-    
+
     return pager_cmd
 
 
@@ -341,7 +338,7 @@ if os.name == 'nt' and os.environ.get('TERM','dumb') != 'emacs':
         return result
 else:
     def page_more():
-        ans = py3compat.input('---Return to continue, q to quit--- ')
+        ans = input('---Return to continue, q to quit--- ')
         if ans.lower().startswith('q'):
             return False
         else:

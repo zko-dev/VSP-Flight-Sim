@@ -1,12 +1,11 @@
 from copy import copy
-from inspect import isclass, signature, Signature, getmodule
+from inspect import get_annotations, isclass, signature, Signature, getmodule
 from typing import (
     Annotated,
     AnyStr,
     Literal,
     NamedTuple,
     NewType,
-    Optional,
     Protocol,
     TypeGuard,
     Union,
@@ -30,7 +29,7 @@ from types import MethodDescriptorType, ModuleType, MethodType
 from IPython.utils.decorators import undoc
 
 import types
-from typing import Self, LiteralString, get_type_hints
+from typing import Self, LiteralString
 
 if sys.version_info < (3, 12):
     from typing_extensions import TypeAliasType
@@ -62,10 +61,10 @@ class DoesNotHaveGetAttr(Protocol):
 
 
 # By default `__getattr__` is not explicitly implemented on most objects
-MayHaveGetattr = Union[HasGetAttr, DoesNotHaveGetAttr]
+MayHaveGetattr = HasGetAttr | DoesNotHaveGetAttr
 
 
-def _unbind_method(func: Callable) -> Union[Callable, None]:
+def _unbind_method(func: Callable) -> Callable | None:
     """Get unbound method for given bound method.
 
     Returns None if cannot get unbound method, or method is already unbound.
@@ -513,7 +512,7 @@ class ImpersonatingDuck:
 class _Duck:
     """A dummy class used to create objects pretending to have given attributes"""
 
-    def __init__(self, attributes: Optional[dict] = None, items: Optional[dict] = None):
+    def __init__(self, attributes: dict | None = None, items: dict | None = None):
         self.attributes = attributes if attributes is not None else {}
         self.items = items if items is not None else {}
 
@@ -536,7 +535,7 @@ class _Duck:
         return self.items.keys()
 
 
-def _find_dunder(node_op, dunders) -> Union[tuple[str, ...], None]:
+def _find_dunder(node_op, dunders) -> tuple[str, ...] | None:
     dunder = None
     for op, candidate_dunder in dunders.items():
         if isinstance(node_op, op):
@@ -751,7 +750,7 @@ def _is_instance_attribute_assignment(
     )
 
 
-def _get_coroutine_attributes() -> dict[str, Optional[object]]:
+def _get_coroutine_attributes() -> dict[str, object | None]:
     async def _dummy():
         return None
 
@@ -762,7 +761,7 @@ def _get_coroutine_attributes() -> dict[str, Optional[object]]:
         coro.close()
 
 
-def eval_node(node: Union[ast.AST, None], context: EvaluationContext):
+def eval_node(node: ast.AST | None, context: EvaluationContext):
     """Evaluate AST node in provided context.
 
     Applies evaluation restrictions defined in the context. Currently does not support evaluation of functions with keyword arguments.
@@ -1126,14 +1125,9 @@ def eval_node(node: Union[ast.AST, None], context: EvaluationContext):
                 value if isinstance(value, type) else getattr(value, "__class__", None)
             )
             if cls is not None:
-                resolved_hints = get_type_hints(
-                    cls,
-                    globalns=(context.globals or {}),
-                    localns=(context.locals or {}),
-                )
-                if node.attr in resolved_hints:
-                    annotated = resolved_hints[node.attr]
-                    return _resolve_annotation(annotated, context)
+                hints = _collect_annotations(cls)
+                if node.attr in hints:
+                    return _resolve_annotation(hints[node.attr], context)
         except Exception:
             # Fall through to the guard rejection
             pass
@@ -1244,7 +1238,7 @@ def _merge_values(values, policy: EvaluationPolicy):
 
     if len(types) == 1:
         t = next(iter(types))
-        if t not in (dict,) and not (
+        if t is not dict and not (
             hasattr(next(iter(values)), "__getitem__")
             and (
                 hasattr(next(iter(values)), "items")
@@ -1320,15 +1314,27 @@ def _eval_return_type(func: Callable, node: ast.Call, context: EvaluationContext
     return NOT_EVALUATED
 
 
+def _collect_annotations(cls: type) -> dict:
+    """Collect annotations of a class and its bases without resolving them.
+
+    `typing.get_type_hints()` is not usable here because it resolves stringized
+    annotations with `eval()`; under PEP 563 every annotation of a module is a
+    string, so that would run arbitrary code from `__annotations__`. Strings are
+    left as-is and later resolved by `_eval_annotation` under the policy.
+    """
+    annotations: dict = {}
+    for base in reversed(cls.__mro__):
+        annotations.update(get_annotations(base, eval_str=False))
+    return annotations
+
+
 def _eval_annotation(
     annotation: str,
     context: EvaluationContext,
 ):
-    return (
-        _eval_node_name(annotation, context)
-        if isinstance(annotation, str)
-        else annotation
-    )
+    if not isinstance(annotation, str):
+        return annotation
+    return eval_node(ast.parse(annotation, mode="eval").body, context)
 
 
 class _GetItemDuck(dict):

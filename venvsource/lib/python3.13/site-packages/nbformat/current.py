@@ -34,7 +34,7 @@ from nbformat.v3 import (
 from . import versions
 from .converter import convert
 from .reader import reads as reader_reads
-from .validator import ValidationError, validate
+from .validator import ValidationError, _validate, validate
 
 warnings.warn(
     """nbformat.current is deprecated since before nbformat 3.0
@@ -47,32 +47,32 @@ warnings.warn(
 )
 
 __all__ = [
+    "NBFormatError",
     "NotebookNode",
-    "new_code_cell",
-    "new_text_cell",
-    "new_notebook",
-    "new_output",
-    "new_worksheet",
-    "parse_filename",
-    "new_metadata",
-    "new_author",
-    "new_heading_cell",
+    "convert",
     "nbformat",
     "nbformat_minor",
     "nbformat_schema",
-    "to_notebook_json",
-    "convert",
-    "validate",
-    "NBFormatError",
+    "new_author",
+    "new_code_cell",
+    "new_heading_cell",
+    "new_metadata",
+    "new_notebook",
+    "new_output",
+    "new_text_cell",
+    "new_worksheet",
+    "parse_filename",
     "parse_py",
-    "reads_json",
-    "writes_json",
-    "reads_py",
-    "writes_py",
-    "reads",
-    "writes",
     "read",
+    "reads",
+    "reads_json",
+    "reads_py",
+    "to_notebook_json",
+    "validate",
     "write",
+    "writes",
+    "writes_json",
+    "writes_py",
 ]
 
 current_nbformat = nbformat
@@ -131,7 +131,7 @@ def writes_json(nb, **kwargs):
 def reads_py(s, **kwargs):
     """DEPRECATED: use nbconvert"""
     _warn_format()
-    nbf, nbm, s = parse_py(s, **kwargs)
+    nbf, _nbm, s = parse_py(s, **kwargs)
     if nbf in (2, 3):
         nb = versions[nbf].to_notebook_py(s, **kwargs)
     else:
@@ -169,9 +169,7 @@ def reads(s, format="DEPRECATED", version=current_nbformat, **kwargs):
     nb = reader_reads(s, **kwargs)
     nb = convert(nb, version)
     try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=DeprecationWarning)
-            validate(nb, repair_duplicate_cell_ids=False)
+        _validate(nb, repair_duplicate_cell_ids=False)
     except ValidationError as e:
         get_logger().error("Notebook JSON is invalid: %s", e)
     return nb
@@ -199,9 +197,7 @@ def writes(nb, format="DEPRECATED", version=current_nbformat, **kwargs):
         _warn_format()
     nb = convert(nb, version)
     try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=DeprecationWarning)
-            validate(nb, repair_duplicate_cell_ids=False)
+        _validate(nb, repair_duplicate_cell_ids=False)
     except ValidationError as e:
         get_logger().error("Notebook JSON is invalid: %s", e)
     return versions[version].writes_json(nb, **kwargs)

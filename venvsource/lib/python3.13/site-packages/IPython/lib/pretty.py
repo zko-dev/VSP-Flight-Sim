@@ -96,18 +96,13 @@ Inheritance diagram:
 from contextlib import contextmanager
 import datetime
 import os
+import platform
 import re
 import sys
 import types
 from collections import deque
 from inspect import signature
 from io import StringIO
-from warnings import warn
-
-from IPython.utils.decorators import undoc
-from IPython.utils.py3compat import PYPY
-
-from typing import Dict
 
 # Allow pretty-printing of functions with PEP-649 annotations
 if sys.version_info >= (3, 14):
@@ -710,7 +705,7 @@ def _super_pprint(obj, p, cycle):
     p.pretty(obj.__thisclass__)
     p.text(',')
     p.breakable()
-    if PYPY: # In PyPy, super() objects don't have __self__ attributes
+    if platform.python_implementation() == "PyPy": # In PyPy, super() objects don't have __self__ attributes
         dself = obj.__repr__.__self__
         p.pretty(None if dself is obj else dself)
     else:
@@ -818,7 +813,7 @@ def _exception_pprint(obj, p, cycle):
     """Base pprint for all exceptions."""
     name = getattr(obj.__class__, '__qualname__', obj.__class__.__name__)
     if obj.__class__.__module__ not in ('exceptions', 'builtins'):
-        name = '%s.%s' % (obj.__class__.__module__, name)
+        name = '{}.{}'.format(obj.__class__.__module__, name)
 
     p.pretty(CallExpression(name, *getattr(obj, 'args', ())))
 
@@ -866,7 +861,7 @@ _type_pprinters[range] = _repr_pprint
 _type_pprinters[bytes] = _repr_pprint
 
 #: printers for types specified by name
-_deferred_type_pprinters: Dict = {}
+_deferred_type_pprinters: dict = {}
 
 
 def for_type(typ, func):

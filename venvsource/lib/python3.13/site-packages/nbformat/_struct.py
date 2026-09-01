@@ -5,12 +5,12 @@ Can probably be replaced by types.SimpleNamespace from Python 3.3
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 __all__ = ["Struct"]
 
 
-class Struct(Dict[Any, Any]):
+class Struct(dict[Any, Any]):
     """A dict subclass with attribute style access.
 
     This dict subclass has a a few extra features:
@@ -360,8 +360,8 @@ class Struct(Dict[Any, Any]):
                     inv_conflict_solve_user[func] = inv_conflict_solve_user[name]
                     del inv_conflict_solve_user[name]
             conflict_solve.update(self.__dict_invert(inv_conflict_solve_user))
-        for key in data_dict:
+        for key, value in data_dict.items():
             if key not in self:
-                self[key] = data_dict[key]
+                self[key] = value
             else:
-                self[key] = conflict_solve[key](self[key], data_dict[key])
+                self[key] = conflict_solve[key](self[key], value)

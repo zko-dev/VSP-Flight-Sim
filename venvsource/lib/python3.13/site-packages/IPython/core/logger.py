@@ -9,6 +9,8 @@
 #  the file COPYING, distributed as part of this software.
 #*****************************************************************************
 
+from __future__ import annotations
+
 #****************************************************************************
 # Modules and globals
 
@@ -18,6 +20,7 @@ import io
 import logging
 import os
 import time
+from typing import IO
 
 
 # prevent jedi/parso's debug messages pipe into interactiveshell
@@ -30,8 +33,8 @@ logging.getLogger("parso").setLevel(logging.WARNING)
 class Logger:
     """A Logfile class with different policies for file creation"""
 
-    def __init__(self, home_dir, logfname='Logger.log', loghead=u'',
-                 logmode='over'):
+    def __init__(self, home_dir: str, logfname: str = 'Logger.log',
+                 loghead: str = '', logmode: str = 'over') -> None:
 
         # this is the full ipython instance, we need some attributes from it
         # which won't exist until later. What a mess, clean up later...
@@ -39,8 +42,7 @@ class Logger:
 
         self.logfname = logfname
         self.loghead = loghead
-        self.logmode = logmode
-        self.logfile = None
+        self.logfile: IO[str] | None = None
 
         # Whether to log raw or processed input
         self.log_raw_input = False
@@ -54,19 +56,21 @@ class Logger:
         # activity control flags
         self.log_active = False
 
-    # logmode is a validated property
-    def _set_mode(self,mode):
-        if mode not in ['append','backup','global','over','rotate']:
+        self.logmode = logmode
+
+    @property
+    def logmode(self) -> str:
+        return self._logmode
+
+    @logmode.setter
+    def logmode(self, mode: str) -> None:
+        if mode not in ['append', 'backup', 'global', 'over', 'rotate']:
             raise ValueError('invalid log mode %s given' % mode)
         self._logmode = mode
 
-    def _get_mode(self):
-        return self._logmode
-
-    logmode = property(_get_mode,_set_mode)
-
-    def logstart(self, logfname=None, loghead=None, logmode=None,
-                 log_output=False, timestamp=False, log_raw_input=False):
+    def logstart(self, logfname: str | None = None, loghead: str | None = None,
+                 logmode: str | None = None, log_output: bool = False,
+                 timestamp: bool = False, log_raw_input: bool = False) -> None:
         """Generate a new log-file with a default header.
 
         Raises RuntimeError if the log has already been started"""
@@ -90,7 +94,7 @@ class Logger:
         logmode = self.logmode
 
         if logmode == 'append':
-            self.logfile = io.open(self.logfname, 'a', encoding='utf-8')
+            self.logfile = open(self.logfname, 'a', encoding='utf-8')
 
         elif logmode == 'backup':
             if isfile(self.logfname):
@@ -100,16 +104,16 @@ class Logger:
                 if isfile(backup_logname):
                     os.remove(backup_logname)
                 os.rename(self.logfname,backup_logname)
-            self.logfile = io.open(self.logfname, 'w', encoding='utf-8')
+            self.logfile = open(self.logfname, 'w', encoding='utf-8')
 
         elif logmode == 'global':
             self.logfname = os.path.join(self.home_dir,self.logfname)
-            self.logfile = io.open(self.logfname, 'a', encoding='utf-8')
+            self.logfile = open(self.logfname, 'a', encoding='utf-8')
 
         elif logmode == 'over':
             if isfile(self.logfname):
                 os.remove(self.logfname)
-            self.logfile = io.open(self.logfname,'w', encoding='utf-8')
+            self.logfile = open(self.logfname,'w', encoding='utf-8')
 
         elif logmode == 'rotate':
             if isfile(self.logfname):
@@ -122,7 +126,7 @@ class Logger:
                         num = int(ext[1:-1])+1
                         os.rename(f, root+'.'+repr(num).zfill(3)+'~')
                 os.rename(self.logfname, self.logfname+'.001~')
-            self.logfile = io.open(self.logfname, 'w', encoding='utf-8')
+            self.logfile = open(self.logfname, 'w', encoding='utf-8')
 
         if logmode != 'append':
             self.logfile.write(self.loghead)
@@ -130,7 +134,7 @@ class Logger:
         self.logfile.flush()
         self.log_active = True
 
-    def switch_log(self,val):
+    def switch_log(self, val: bool) -> None:
         """Switch logging on/off. val should be ONLY a boolean."""
 
         if val not in [False,True,0,1]:
@@ -155,7 +159,7 @@ which already exists. But you must first start the logging process with
                 self.log_active = not self.log_active
                 self.log_active_out = self.log_active
 
-    def logstate(self):
+    def logstate(self) -> None:
         """Print a status message about the logger."""
         if self.logfile is None:
             print('Logging has not been activated.')
@@ -168,7 +172,7 @@ which already exists. But you must first start the logging process with
             print('Timestamping   :', self.timestamp)
             print('State          :', state)
 
-    def log(self, line_mod, line_ori):
+    def log(self, line_mod: str, line_ori: str) -> None:
         """Write the sources to a log.
 
         Inputs:
@@ -188,7 +192,7 @@ which already exists. But you must first start the logging process with
         else:
             self.log_write(line_mod)
 
-    def log_write(self, data, kind='input'):
+    def log_write(self, data: str, kind: str = 'input') -> None:
         """Write data to the log file, if active"""
 
         # print('data: %r' % data)  # dbg
@@ -199,9 +203,9 @@ which already exists. But you must first start the logging process with
                     write(time.strftime('# %a, %d %b %Y %H:%M:%S\n', time.localtime()))
                 write(data)
             elif kind=='output' and self.log_output:
-                odata = u'\n'.join([u'#[Out]# %s' % s
+                odata = '\n'.join(['#[Out]# %s' % s
                                    for s in data.splitlines()])
-                write(u'%s\n' % odata)
+                write('%s\n' % odata)
             try:
                 self.logfile.flush()
             except OSError:
@@ -213,7 +217,7 @@ which already exists. But you must first start the logging process with
                     "Also consider turning off the log with `%logstop` to avoid this warning."
                 )
 
-    def logstop(self):
+    def logstop(self) -> None:
         """Fully stop logging and close log file.
 
         In order to start logging again, a new logstart() call needs to be

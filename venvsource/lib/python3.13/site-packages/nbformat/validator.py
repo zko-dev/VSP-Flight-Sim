@@ -8,9 +8,9 @@ import json
 import pprint
 import warnings
 from copy import deepcopy
+from itertools import chain
 from pathlib import Path
-from textwrap import dedent
-from typing import Any, Optional
+from typing import Any
 
 from ._imports import import_item
 from .corpus.words import generate_corpus_id
@@ -18,19 +18,18 @@ from .json_compat import ValidationError, _validator_for_name, get_current_valid
 from .reader import get_version
 from .warnings import DuplicateCellId, MissingIDFieldWarning
 
-validators = {}
-_deprecated = object()
+validators: dict[tuple[str, int | None, int | None, bool], Any] = {}
 
 
 __all__ = [
+    "NotebookValidationError",
     "ValidationError",
+    "better_validation_error",
     "get_validator",
     "isvalid",
-    "NotebookValidationError",
-    "better_validation_error",
+    "iter_validate",
     "normalize",
     "validate",
-    "iter_validate",
 ]
 
 
@@ -57,7 +56,7 @@ def _allow_undefined(schema):
 def get_validator(version=None, version_minor=None, relax_add_props=False, name=None):
     """Load the JSON schema into a Validator"""
     if version is None:
-        from . import current_nbformat
+        from . import current_nbformat  # noqa:PLC0415
 
         version = current_nbformat
 
@@ -68,7 +67,9 @@ def get_validator(version=None, version_minor=None, relax_add_props=False, name=
 
     current_validator = _validator_for_name(name) if name else get_current_validator()
 
-    version_tuple = (current_validator.name, version, version_minor)
+    # `relax_add_props` is part of the key: it produces a different schema, so a
+    # relaxed validator must not be handed out to callers asking for a strict one.
+    version_tuple = (current_validator.name, version, version_minor, relax_add_props)
 
     if version_tuple not in validators:
         try:
@@ -82,17 +83,11 @@ def get_validator(version=None, version_minor=None, relax_add_props=False, name=
             # and allow undefined cell types and outputs
             schema_json = _allow_undefined(schema_json)
 
-        validators[version_tuple] = current_validator(schema_json)
+        if relax_add_props:
+            # this allows properties to be added for intermediate
+            # representations while validating for all other kinds of errors
+            schema_json = _relax_additional_properties(schema_json)
 
-    if relax_add_props:
-        try:
-            schema_json = _get_schema_json(v, version=version, version_minor=version_minor)
-        except AttributeError:
-            return None
-
-        # this allows properties to be added for intermediate
-        # representations while validating for all other kinds of errors
-        schema_json = _relax_additional_properties(schema_json)
         validators[version_tuple] = current_validator(schema_json)
 
     return validators[version_tuple]
@@ -126,9 +121,8 @@ def isvalid(nbjson, ref=None, version=None, version_minor=None):
     orig = deepcopy(nbjson)
     try:
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=DeprecationWarning)
             warnings.filterwarnings("ignore", category=MissingIDFieldWarning)
-            validate(nbjson, ref, version, version_minor, repair_duplicate_cell_ids=False)
+            _validate(nbjson, ref, version, version_minor, repair_duplicate_cell_ids=False)
     except ValidationError:
         return False
     else:
@@ -260,7 +254,7 @@ def better_validation_error(error, version, version_minor):
                 if better.ref is None:
                     better.ref = ref
                 return better
-            except Exception:  # noqa: S110
+            except Exception:  # noqa: S110, BLE001
                 # if it fails for some reason,
                 # let the original error through
                 pass
@@ -269,8 +263,8 @@ def better_validation_error(error, version, version_minor):
 
 def normalize(
     nbdict: Any,
-    version: Optional[int] = None,
-    version_minor: Optional[int] = None,
+    version: int | None = None,
+    version_minor: int | None = None,
     *,
     relax_add_props: bool = False,
     strip_invalid_metadata: bool = False,
@@ -391,31 +385,13 @@ def _normalize(
     return changes, nbdict
 
 
-def _dep_warn(field):
-    warnings.warn(
-        dedent(
-            f"""`{field}` kwargs of validate has been deprecated for security
-        reasons, and will be removed soon.
-
-        Please explicitly use the `n_changes, new_notebook = nbformat.validator.normalize(old_notebook, ...)` if you wish to
-        normalise your notebook. `normalize` is available since nbformat 5.5.0
-
-        """
-        ),
-        DeprecationWarning,
-        stacklevel=3,
-    )
-
-
 def validate(
     nbdict: Any = None,
-    ref: Optional[str] = None,
-    version: Optional[int] = None,
-    version_minor: Optional[int] = None,
+    ref: str | None = None,
+    version: int | None = None,
+    version_minor: int | None = None,
     relax_add_props: bool = False,
     nbjson: Any = None,
-    repair_duplicate_cell_ids: bool = _deprecated,  # type: ignore[assignment]
-    strip_invalid_metadata: bool = _deprecated,  # type: ignore[assignment]
 ) -> None:
     """Checks whether the given notebook dict-like object
     conforms to the relevant notebook format schema.
@@ -433,10 +409,6 @@ def validate(
         Whether to allow extra properties in the JSON schema validating the notebook.
         When True, all known fields are validated, but unknown fields are ignored.
     nbjson
-    repair_duplicate_cell_ids : bool
-        Deprecated since 5.5.0 - will be removed in the future.
-    strip_invalid_metadata : bool
-        Deprecated since 5.5.0 - will be removed in the future.
 
     Returns
     -------
@@ -448,24 +420,8 @@ def validate(
 
     Notes
     -----
-    Prior to Nbformat 5.5.0 the `validate` and `isvalid` method would silently
-    try to fix invalid notebook and mutate arguments. This behavior is deprecated
-    and will be removed in a near future.
-
     Please explicitly call `normalize` if you need to normalize notebooks.
     """
-    assert isinstance(ref, str) or ref is None
-
-    if strip_invalid_metadata is _deprecated:
-        strip_invalid_metadata = False
-    else:
-        _dep_warn("strip_invalid_metadata")
-
-    if repair_duplicate_cell_ids is _deprecated:
-        repair_duplicate_cell_ids = True
-    else:
-        _dep_warn("repair_duplicate_cell_ids")
-
     # backwards compatibility for nbjson argument
     if nbdict is not None:
         pass
@@ -474,6 +430,27 @@ def validate(
     else:
         msg = "validate() missing 1 required argument: 'nbdict'"
         raise TypeError(msg)
+
+    _validate(nbdict, ref, version, version_minor, relax_add_props)
+
+
+def _validate(
+    nbdict: Any,
+    ref: str | None = None,
+    version: int | None = None,
+    version_minor: int | None = None,
+    relax_add_props: bool = False,
+    *,
+    repair_duplicate_cell_ids: bool = True,
+    strip_invalid_metadata: bool = False,
+) -> None:
+    """Validate a notebook, with explicit control over normalization behavior.
+
+    Internal callers (`isvalid`, `normalize`) use this helper to set
+    `repair_duplicate_cell_ids` and `strip_invalid_metadata` explicitly; the
+    public `validate` always uses the defaults.
+    """
+    assert isinstance(ref, str) or ref is None
 
     if ref is None:
         # if ref is not specified, we have a whole notebook, so we can get the version
@@ -516,10 +493,15 @@ def _get_errors(
     if not validator:
         msg = f"No schema for validating v{version}.{version_minor} notebooks"
         raise ValidationError(msg)
-    iter_errors = validator.iter_errors(nbdict, *args)
-    errors = list(iter_errors)
+    # Peek at the first error rather than draining the iterator: callers that only
+    # need a verdict (or only the first error) should not pay for a full traversal.
+    # `iter()` once and reuse it, since a backend may hand back a list.
+    errors = iter(validator.iter_errors(nbdict, *args))
+    first = next(errors, None)
+    if first is None:
+        return iter(())
     # jsonschema gives the best error messages.
-    if len(errors) and validator.name != "jsonschema":
+    if validator.name != "jsonschema":
         validator = get_validator(
             version=version,
             version_minor=version_minor,
@@ -527,7 +509,7 @@ def _get_errors(
             name="jsonschema",
         )
         return validator.iter_errors(nbdict, *args)
-    return iter(errors)
+    return chain((first,), errors)
 
 
 def _strip_invalida_metadata(
@@ -556,7 +538,8 @@ def _strip_invalida_metadata(
     """
     errors = _get_errors(nbdict, version, version_minor, relax_add_props)
     changes = 0
-    if len(list(errors)) > 0:
+    # only the presence of an error matters here, so don't drain the iterator
+    if next(iter(errors), None) is not None:
         # jsonschema gives a better error tree.
         validator = get_validator(
             version=version,

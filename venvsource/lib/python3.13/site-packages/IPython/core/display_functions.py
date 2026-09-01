@@ -7,7 +7,6 @@
 from binascii import b2a_hex
 import os
 import sys
-import warnings
 
 __all__ = ['display', 'clear_output', 'publish_display_data', 'update_display', 'DisplayHandle']
 
@@ -327,7 +326,7 @@ class DisplayHandle:
         self.display_id = display_id
 
     def __repr__(self):
-        return "<%s display_id=%s>" % (self.__class__.__name__, self.display_id)
+        return "<{} display_id={}>".format(self.__class__.__name__, self.display_id)
 
     def display(self, obj, **kwargs):
         """Make a new display with my id, updating existing instances.

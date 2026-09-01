@@ -61,7 +61,9 @@ if sys.version_info >= (3, 12):
     RESERVED_ATTRS.sort()
 
 
-STYLE_STRING_TEMPLATE_REGEX = re.compile(r"\$\{(.+?)\}", re.IGNORECASE)  # $ style
+STYLE_STRING_TEMPLATE_REGEX = re.compile(
+    r"\$(?:\$|\{(?P<braced>.+?)\}|(?P<named>[_a-z][_a-z0-9]*))", re.IGNORECASE
+)  # $ style
 STYLE_STRING_FORMAT_REGEX = re.compile(r"\{(.+?)\}", re.IGNORECASE)  # { style
 STYLE_PERCENT_REGEX = re.compile(r"%\((.+?)\)", re.IGNORECASE)  # % style
 
@@ -111,10 +113,6 @@ class BaseJsonFormatter(logging.Formatter):
     Must not be used directly.
 
     *New in 3.1*
-
-    *Changed in 3.2*: `defaults` argument is no longer ignored.
-
-    *Added in 3.3*: `exc_info_as_array` and `stack_info_as_array` options are added.
     """
 
     _style: logging.PercentStyle | str  # type: ignore[assignment]
@@ -172,16 +170,19 @@ class BaseJsonFormatter(logging.Formatter):
           missing fields. The original behaviour, missing fields have a value of `None`, is still
           available by setting `rename_fields_keep_missing` to `True`.
 
+        *Changed in 3.2*: `defaults` argument is no longer ignored.
+
+        *Added in 3.3*: `exc_info_as_array` and `stack_info_as_array` options are added.
+
         *Added in 4.0*:
 
-        - `fmt` now supports comma seperated lists (`style=","`). Note that this style is specific
+        - `fmt` now supports comma separated lists (`style=","`). Note that this style is specific
           to `python-json-logger` and thus care should be taken to not to pass this format to other
           logging Formatter implementations.
         - `fmt` now supports sequences of strings (e.g. lists and tuples) of field names.
         """
         ## logging.Formatter compatibility
         ## ---------------------------------------------------------------------
-        # Note: validate added in python 3.8, defaults added in 3.10
         if fmt is None or isinstance(fmt, str):
             if style in logging._STYLES:
                 _style = logging._STYLES[style][0](fmt)  # type: ignore[operator]
@@ -236,14 +237,20 @@ class BaseJsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Formats a log record and serializes to json
 
+        When `record.msg` is a `dict`, adding `exc_info` and `stack_info` does not
+        modify the caller's dict.
+
         Args:
             record: the record to format
+
+        *Changed in 4.2.0*: a `dict` `record.msg` is copied instead of modified
+        in place.
         """
         message_dict: dict[str, Any] = {}
         # TODO: logging.LogRecord.msg and logging.LogRecord.message in typeshed
         #        are always type of str. We shouldn't need to override that.
         if isinstance(record.msg, dict):
-            message_dict = record.msg
+            message_dict = record.msg.copy()
             record.message = ""
         else:
             record.message = record.getMessage()
@@ -296,20 +303,22 @@ class BaseJsonFormatter(logging.Formatter):
             raise ValueError(f"Style {self._style!r} is not supported")
 
         if isinstance(self._style, logging.StringTemplateStyle):
-            formatter_style_pattern = STYLE_STRING_TEMPLATE_REGEX
+            # String templates support both ${name} and $name, and $$ is an escaped literal
+            return [
+                match.group("braced") or match.group("named")
+                for match in STYLE_STRING_TEMPLATE_REGEX.finditer(self._fmt)
+                if match.group("braced") or match.group("named")
+            ]
 
-        elif isinstance(self._style, logging.StrFormatStyle):
-            formatter_style_pattern = STYLE_STRING_FORMAT_REGEX
+        if isinstance(self._style, logging.StrFormatStyle):
+            return STYLE_STRING_FORMAT_REGEX.findall(self._fmt)
 
-        elif isinstance(self._style, logging.PercentStyle):
+        if isinstance(self._style, logging.PercentStyle):
             # PercentStyle is parent class of StringTemplateStyle and StrFormatStyle
             # so it must be checked last.
-            formatter_style_pattern = STYLE_PERCENT_REGEX
+            return STYLE_PERCENT_REGEX.findall(self._fmt)
 
-        else:
-            raise ValueError(f"Style {self._style!r} is not supported")
-
-        return formatter_style_pattern.findall(self._fmt)
+        raise ValueError(f"Style {self._style!r} is not supported")
 
     def serialize_log_record(self, log_data: LogData) -> str:
         """Returns the final representation of the data to be logged

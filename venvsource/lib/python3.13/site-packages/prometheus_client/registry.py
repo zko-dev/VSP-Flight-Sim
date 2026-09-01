@@ -1,6 +1,6 @@
 import copy
 from threading import Lock
-from typing import Dict, Iterable, List, Optional, Protocol
+from typing import Dict, Iterable, List, Optional, Protocol, Set
 
 from .metrics_core import Metric
 
@@ -13,6 +13,14 @@ class Collector(Protocol):
 class _EmptyCollector:
     def collect(self) -> Iterable[Metric]:
         return []
+
+
+class DuplicateTimeseries(ValueError):
+    def __init__(self, duplicates: Set[str]):
+        msg = 'Duplicated timeseries in CollectorRegistry: {}'.format(
+            duplicates)
+        super().__init__(msg)
+        self.duplicates: Set[str] = duplicates
 
 
 class CollectorRegistry:
@@ -40,9 +48,7 @@ class CollectorRegistry:
             names = self._get_names(collector)
             duplicates = set(self._names_to_collectors).intersection(names)
             if duplicates:
-                raise ValueError(
-                    'Duplicated timeseries in CollectorRegistry: {}'.format(
-                        duplicates))
+                raise DuplicateTimeseries(duplicates)
             for name in names:
                 self._names_to_collectors[name] = collector
             self._collector_to_names[collector] = names
@@ -55,6 +61,8 @@ class CollectorRegistry:
             for name in self._collector_to_names[collector]:
                 del self._names_to_collectors[name]
             del self._collector_to_names[collector]
+            if collector in self._collectors_without_names:
+                self._collectors_without_names.remove(collector)
 
     def _get_names(self, collector):
         """Get names of timeseries the collector produces and clashes with."""

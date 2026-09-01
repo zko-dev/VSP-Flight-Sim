@@ -1,3 +1,4 @@
+from __future__ import annotations
 from datetime import datetime
 import os
 import sys
@@ -110,7 +111,7 @@ else:
 
 if sys.version_info < (3, 12):
     _tips["random"].append(
-        "IPython support for Python versions outside of SPEC-0 is funded by the D.E. Shaw group: https://deshaw.com"
+        "IPython support for Python versions outside of SPEC-0 is funded by the D. E. Shaw group: https://deshaw.com"
     )
 
 # Check if argcomplete is installed and add tip

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import functools
 import inspect
 import pydoc
@@ -5,23 +7,22 @@ import sys
 import types
 import warnings
 from types import TracebackType
-from typing import Any, Optional, Tuple
+from typing import Any
 from collections.abc import Callable
 
 import stack_data
 from pygments.token import Token
 
-from IPython import get_ipython
+from IPython.core.getipython import get_ipython
 from IPython.core import debugger
 from IPython.utils import path as util_path
-from IPython.utils import py3compat
 from IPython.utils.PyColorize import Theme, TokenStream, theme_table
 
 _sentinel = object()
 INDENT_SIZE = 8
 
 
-@functools.lru_cache
+@functools.lru_cache(maxsize=128)
 def count_lines_in_py_file(filename: str) -> int:
     """
     Given a filename, returns the number of lines in the file
@@ -31,7 +32,7 @@ def count_lines_in_py_file(filename: str) -> int:
         return 0
     else:
         try:
-            with open(filename, "r") as file:
+            with open(filename) as file:
                 s = sum(1 for line in file)
         except UnicodeError:
             return 0
@@ -57,10 +58,6 @@ def get_line_number_of_frame(frame: types.FrameType) -> int:
         if the file is not available.
     """
     filename = frame.f_code.co_filename
-    if filename is None:
-        print("No file....")
-        lines, first = inspect.getsourcelines(frame)
-        return first + len(lines)
     return count_lines_in_py_file(filename)
 
 
@@ -68,12 +65,12 @@ def _safe_string(value: Any, what: Any, func: Any = str) -> str:
     # Copied from cpython/Lib/traceback.py
     try:
         return func(value)
-    except:
+    except Exception:
         return f"<{what} {func.__name__}() failed>"
 
 
 def _format_traceback_lines(
-    lines: list[stack_data.Line],
+    lines: list[stack_data.Line | stack_data.core.LineGap],
     theme: Theme,
     has_colors: bool,
     lvals_toks: list[TokenStream],
@@ -85,13 +82,13 @@ def _format_traceback_lines(
 
     Parameters
     ----------
-    lines : list[Line]
+    lines : list[Line | LineGap]
     """
     numbers_width = INDENT_SIZE - 1
     tokens: TokenStream = []
 
     for stack_line in lines:
-        if stack_line is stack_data.LINE_GAP:
+        if isinstance(stack_line, stack_data.core.LineGap):
             toks = [(Token.LinenoEm, "   (...)")]
             tokens.extend(toks)
             continue
@@ -132,15 +129,15 @@ def text_repr(value: Any) -> str:
     """Hopefully pretty robust repr equivalent."""
     # this is pretty horrible but should always return *something*
     try:
-        return pydoc.text.repr(value)  # type: ignore[call-arg]
+        return pydoc.text.repr(value)
     except KeyboardInterrupt:
         raise
-    except:
+    except Exception:
         try:
             return repr(value)
         except KeyboardInterrupt:
             raise
-        except:
+        except Exception:
             try:
                 # all still in an except block so we catch
                 # getattr raising
@@ -154,7 +151,7 @@ def text_repr(value: Any) -> str:
                 return "UNRECOVERABLE REPR FAILURE"
             except KeyboardInterrupt:
                 raise
-            except:
+            except Exception:
                 return "UNRECOVERABLE REPR FAILURE"
 
 
@@ -177,14 +174,16 @@ def _tokens_filename(
 
     Parameters
     ----------
-    em: wether bold or not
+    em: whether bold or not
     file : str
     """
+    assert file is None or isinstance(file, str)
     Normal = Token.NormalEm if em else Token.Normal
     Filename = Token.FilenameEm if em else Token.Filename
     ipinst = get_ipython()
     if (
         ipinst is not None
+        and file is not None
         and (data := ipinst.compile.format_code_name(file)) is not None
     ):
         label, name = data
@@ -202,9 +201,8 @@ def _tokens_filename(
                 (Filename, f", line {lineno}"),
             ]
     else:
-        name = util_path.compress_user(
-            py3compat.cast_unicode(file or "", util_path.fs_encoding)
-        )
+        file_str = file or ""
+        name = util_path.compress_user(file_str)
         if lineno is None:
             return [
                 (Normal, "File "),
@@ -287,19 +285,19 @@ class FrameInfo:
     really long frames.
     """
 
-    description: Optional[str]
-    filename: Optional[str]
+    description: str | None
+    filename: str | None
     lineno: int
     # number of context lines to use
-    context: Optional[int]
+    context: int | None
     raw_lines: list[str]
-    _sd: stack_data.core.FrameInfo
+    _sd: stack_data.core.FrameInfo | stack_data.core.RepeatedFrames | None
     frame: Any
 
     @classmethod
     def _from_stack_data_FrameInfo(
         cls, frame_info: stack_data.core.FrameInfo | stack_data.core.RepeatedFrames
-    ) -> "FrameInfo":
+    ) -> FrameInfo:
         return cls(
             getattr(frame_info, "description", None),
             getattr(frame_info, "filename", None),  # type: ignore[arg-type]
@@ -312,11 +310,11 @@ class FrameInfo:
 
     def __init__(
         self,
-        description: Optional[str],
+        description: str | None,
         filename: str,
         lineno: int,
         frame: Any,
-        code: Optional[types.CodeType],
+        code: types.CodeType | None,
         *,
         sd: Any = None,
         context: int | None = None,
@@ -342,8 +340,10 @@ class FrameInfo:
 
     @property
     def variables_in_executing_piece(self) -> list[Any]:
+        # callers only reach here once RepeatedFrames-backed instances have
+        # been filtered out (see doctb.py/ultratb.py format_record)
         if self._sd is not None:
-            return self._sd.variables_in_executing_piece  # type:ignore[misc]
+            return self._sd.variables_in_executing_piece  # type:ignore[misc,union-attr]
         else:
             return []
 
@@ -351,9 +351,11 @@ class FrameInfo:
     def lines(self) -> list[Any]:
         from executing.executing import NotOneValueFound
 
+        # callers only reach here once RepeatedFrames-backed instances have
+        # been filtered out (see doctb.py/ultratb.py format_record)
         assert self._sd is not None
         try:
-            return self._sd.lines  # type: ignore[misc]
+            return self._sd.lines  # type: ignore[misc,union-attr]
         except NotOneValueFound:
 
             class Dummy:
@@ -367,8 +369,10 @@ class FrameInfo:
 
     @property
     def executing(self) -> Any:
+        # callers only reach here once RepeatedFrames-backed instances have
+        # been filtered out (see doctb.py/ultratb.py format_record)
         if self._sd is not None:
-            return self._sd.executing
+            return self._sd.executing  # type: ignore[union-attr]
         else:
             return None
 
@@ -462,7 +466,7 @@ class TBTools:
 
     def get_parts_of_chained_exception(
         self, evalue: BaseException | None
-    ) -> Optional[Tuple[type, BaseException, TracebackType]]:
+    ) -> tuple[type, BaseException, TracebackType] | None:
         chained_evalue = self._get_chained_exception(evalue)
 
         if chained_evalue:
@@ -530,7 +534,7 @@ class TBTools:
         etype: type,
         value: BaseException | None,
         tb: TracebackType | None,
-        tb_offset: Optional[int] = None,
+        tb_offset: int | None = None,
         context: int = 5,
     ) -> str:
         """Return formatted traceback.
@@ -544,8 +548,8 @@ class TBTools:
         self,
         etype: type,
         evalue: BaseException | None,
-        etb: Optional[TracebackType] = None,
-        tb_offset: Optional[int] = None,
+        etb: TracebackType | None = None,
+        tb_offset: int | None = None,
         context: int = 5,
     ) -> list[str]:
         """Return a list of traceback frames.

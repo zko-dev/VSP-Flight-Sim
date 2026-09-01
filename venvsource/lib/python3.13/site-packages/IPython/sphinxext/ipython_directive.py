@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Sphinx directive to support embedded IPython code.
 
@@ -79,7 +78,7 @@ The configurable options that can be placed in conf.py are:
 
 ipython_savefig_dir:
     The directory in which to save the figures. This is relative to the
-    Sphinx source directory. The default is `html_static_path`.
+    Sphinx source directory. The default is ``savefig``.
 ipython_rgxin:
     The compiled regular expression to denote the start of IPython input
     lines. The default is ``re.compile('In \\[(\\d+)\\]:\\s?(.*)\\s*')``. You
@@ -98,7 +97,7 @@ ipython_promptin:
     in the prompt.
 ipython_promptout:
     The string to represent the IPython prompt in the generated ReST. The
-    default is ``'Out [%d]:'``. This expects that the line numbers are used
+    default is ``'Out[%d]:'``. This expects that the line numbers are used
     in the prompt.
 ipython_mplbackend:
     The string which specifies if the embedded Sphinx shell should import
@@ -196,7 +195,7 @@ import ast
 import warnings
 import shutil
 from io import StringIO
-from typing import Any, Dict, Set
+from typing import Any
 
 # Third-party
 from docutils.parsers.rst import directives
@@ -210,7 +209,8 @@ from IPython.core.profiledir import ProfileDir
 
 use_matplotlib = False
 try:
-    import matplotlib
+    # The import itself is the probe: an ImportError means matplotlib is absent.
+    import matplotlib  # noqa: F401
     use_matplotlib = True
 except Exception:
     pass
@@ -220,6 +220,7 @@ except Exception:
 #-----------------------------------------------------------------------------
 # for tokenizing blocks
 COMMENT, INPUT, OUTPUT =  range(3)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 PSEUDO_DECORATORS = ["suppress", "verbatim", "savefig", "doctest"]
 
@@ -513,7 +514,7 @@ class EmbeddedSphinxShell:
 
         # Fetch the processed output. (This is not the submitted output.)
         self.cout.seek(0)
-        processed_output = self.cout.read()
+        processed_output = _ANSI_RE.sub("", self.cout.read())
         if not is_suppress and not is_semicolon:
             #
             # In IPythonDirective.run, the elements of `ret` are eventually
@@ -576,14 +577,14 @@ class EmbeddedSphinxShell:
             ("Traceback" in processed_output) or ("SyntaxError" in processed_output)
         ):
             s = "\n>>>" + ("-" * 73) + "\n"
-            s += "Exception in %s at block ending on line %s\n" % (filename, lineno)
+            s += "Exception in {} at block ending on line {}\n".format(filename, lineno)
             s += "Specify :okexcept: as an option in the ipython:: block to suppress this message\n"
             s += processed_output + "\n"
             s += "<<<" + ("-" * 73)
             logger.warning(s)
             if self.warning_is_error:
                 raise RuntimeError(
-                    "Unexpected exception in `{}` line {}".format(filename, lineno)
+                    f"Unexpected exception in `{filename}` line {lineno}"
                 )
 
         # output any warning raised during execution to stdout
@@ -591,7 +592,7 @@ class EmbeddedSphinxShell:
         if not is_okwarning:
             for w in ws:
                 s = "\n>>>" + ("-" * 73) + "\n"
-                s += "Warning in %s at block ending on line %s\n" % (filename, lineno)
+                s += "Warning in {} at block ending on line {}\n".format(filename, lineno)
                 s += "Specify :okwarning: as an option in the ipython:: block to suppress this message\n"
                 s += ("-" * 76) + "\n"
                 s += warnings.formatwarning(
@@ -601,7 +602,7 @@ class EmbeddedSphinxShell:
                 logger.warning(s)
                 if self.warning_is_error:
                     raise RuntimeError(
-                        "Unexpected warning in `{}` line {}".format(filename, lineno)
+                        f"Unexpected warning in `{filename}` line {lineno}"
                     )
 
         self.clear_cout()
@@ -685,7 +686,7 @@ class EmbeddedSphinxShell:
             # prompt for now, and we might have to adjust if it doesn't work
             # in other cases. Finally, the submitted output does not have
             # a trailing newline, so we must add it manually.
-            out_data.append("{0} {1}\n".format(output_prompt, data))
+            out_data.append(f"{output_prompt} {data}\n")
 
         return out_data
 
@@ -842,19 +843,19 @@ class EmbeddedSphinxShell:
                 continue
 
             # deal with lines checking for multiline
-            continuation  = u'   %s:'% ''.join(['.']*(len(str(ct))+2))
+            continuation  = '   %s:'% ''.join(['.']*(len(str(ct))+2))
             if not multiline:
-                modified = u"%s %s" % (fmtin % ct, line_stripped)
+                modified = "{} {}".format(fmtin % ct, line_stripped)
                 output.append(modified)
                 ct += 1
                 try:
                     ast.parse(line_stripped)
-                    output.append(u'')
+                    output.append('')
                 except Exception: # on a multiline
                     multiline = True
                     multiline_start = lineno
             else: # still on a multiline
-                modified = u'%s %s' % (continuation, line)
+                modified = '{} {}'.format(continuation, line)
                 output.append(modified)
 
                 # if the next line is indented, it should be part of multiline
@@ -871,7 +872,7 @@ class EmbeddedSphinxShell:
                             if isinstance(element, ast.Return):
                                 multiline = False
                     else:
-                        output.append(u'')
+                        output.append('')
                         multiline = False
                 except Exception:
                     pass
@@ -896,7 +897,7 @@ class EmbeddedSphinxShell:
         if doctest_type in doctests:
             doctests[doctest_type](self, args, input_lines, found, submitted)
         else:
-            e = "Invalid option to @doctest: {0}".format(doctest_type)
+            e = f"Invalid option to @doctest: {doctest_type}"
             raise Exception(e)
 
 
@@ -906,7 +907,7 @@ class IPythonDirective(Directive):
     required_arguments: int = 0
     optional_arguments: int = 4  # python, suppress, verbatim, doctest
     final_argumuent_whitespace: bool = True
-    option_spec: Dict[str, Any] = {
+    option_spec: dict[str, Any] = {
         "python": directives.unchanged,
         "suppress": directives.flag,
         "verbatim": directives.flag,
@@ -917,7 +918,7 @@ class IPythonDirective(Directive):
 
     shell = None
 
-    seen_docs: Set = set()
+    seen_docs: set = set()
 
     def get_config_options(self):
         # contains sphinx configuration variables
@@ -1000,8 +1001,29 @@ class IPythonDirective(Directive):
                                       store_history=False)
         self.shell.clear_cout()
 
+    def _is_inside_excluded_only(self):
+        """Return True if inside an ``only`` node whose condition is false."""
+        try:
+            env = self.state.document.settings.env
+            tags = env.app.tags
+        except AttributeError:
+            return False
+
+        node = self.state.parent
+        while node is not None:
+            if getattr(node, 'tagname', '') == 'only':
+                expr = node.get('expr', '')
+                if expr and not tags.eval_condition(expr):
+                    return True
+            node = getattr(node, 'parent', None)
+        return False
+
     def run(self):
         debug = False
+
+        # gh-9339: skip execution when inside an excluded only block.
+        if self._is_inside_excluded_only():
+            return []
 
         #TODO, any reason block_parser can't be a method of embeddable shell
         # then we wouldn't have to carry these around
@@ -1034,7 +1056,7 @@ class IPythonDirective(Directive):
             if len(block):
                 rows, figure = self.shell.process_block(block)
                 for row in rows:
-                    lines.extend(['   {0}'.format(line)
+                    lines.extend([f'   {line}'
                                   for line in row.split('\n')])
 
                 if figure is not None:

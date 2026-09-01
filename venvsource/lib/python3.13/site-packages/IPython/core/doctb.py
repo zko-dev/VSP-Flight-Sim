@@ -3,7 +3,7 @@ import linecache
 import sys
 from collections.abc import Sequence
 from types import TracebackType
-from typing import Any, Optional
+from typing import Any
 from collections.abc import Callable
 
 import stack_data
@@ -27,7 +27,7 @@ INDENT_SIZE = 8
 
 
 def _format_traceback_lines(
-    lines: list[stack_data.Line],
+    lines: list[stack_data.Line | stack_data.core.LineGap],
     theme: Theme,
     has_colors: bool,
     lvals_toks: list[TokenStream],
@@ -39,13 +39,13 @@ def _format_traceback_lines(
 
     Parameters
     ----------
-    lines : list[Line]
+    lines : list[Line | LineGap]
     """
     numbers_width = INDENT_SIZE - 1
     tokens: TokenStream = [(Token, "\n")]
 
     for stack_line in lines:
-        if stack_line is stack_data.LINE_GAP:
+        if isinstance(stack_line, stack_data.core.LineGap):
             toks = [(Token.LinenoEm, "   (...)")]
             tokens.extend(toks)
             continue
@@ -255,7 +255,7 @@ class DocTB(TBTools):
         # Get (safely) a string form of the exception info
         try:
             etype_str, evalue_str = map(str, (etype, evalue))
-        except:
+        except Exception:
             # User exception is improperly defined.
             etype, evalue = str, sys.exc_info()[:2]
             etype_str, evalue_str = map(str, (etype, evalue))
@@ -279,10 +279,10 @@ class DocTB(TBTools):
     def format_exception_as_a_whole(
         self,
         etype: type,
-        evalue: Optional[BaseException],
-        etb: Optional[TracebackType],
+        evalue: BaseException | None,
+        etb: TracebackType | None,
         context: int,
-        tb_offset: Optional[int],
+        tb_offset: int | None,
     ) -> list[list[str]]:
         """Formats the header, traceback and exception message for a single exception.
 
@@ -330,7 +330,10 @@ class DocTB(TBTools):
         before = context - after
         if self.has_colors:
             base_style = theme_table[self._theme_name].as_pygments_style()
-            style = stack_data.style_with_executing_node(base_style, self.tb_highlight)
+            # stack_data ships without type annotations
+            style = stack_data.style_with_executing_node(  # type: ignore[no-untyped-call]
+                base_style, self.tb_highlight
+            )
             formatter = Terminal256Formatter(style=style)
         else:
             formatter = None
@@ -341,7 +344,7 @@ class DocTB(TBTools):
         )
 
         # Let's estimate the amount of code we will have to parse/highlight.
-        cf: Optional[TracebackType] = etb
+        cf: TracebackType | None = etb
         max_len = 0
         tbs = []
         while cf is not None:
@@ -368,9 +371,9 @@ class DocTB(TBTools):
     def structured_traceback(
         self,
         etype: type,
-        evalue: Optional[BaseException],
-        etb: Optional[TracebackType] = None,
-        tb_offset: Optional[int] = None,
+        evalue: BaseException | None,
+        etb: TracebackType | None = None,
+        tb_offset: int | None = None,
         context: int = 1,
     ) -> list[str]:
         """Return a nice text document describing the traceback."""

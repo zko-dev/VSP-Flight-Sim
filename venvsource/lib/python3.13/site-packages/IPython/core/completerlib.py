@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Implementations for various useful completers.
 
 These are all loaded by default by IPython.
@@ -35,9 +34,7 @@ from .error import TryNext
 from ..utils._process_common import arg_split
 
 # FIXME: this should be pulled in with the right call via the component system
-from IPython import get_ipython
-
-from typing import List
+from IPython.core.getipython import get_ipython
 
 #-----------------------------------------------------------------------------
 # Globals and constants
@@ -65,7 +62,7 @@ magic_run_re = re.compile(r'.*(\.ipy|\.ipynb|\.py[w]?)$')
 #-----------------------------------------------------------------------------
 
 
-def module_list(path: str) -> List[str]:
+def module_list(path: str) -> list[str]:
     """
     Return the list containing the names of the modules available in the given
     folder.
@@ -81,7 +78,7 @@ def module_list(path: str) -> List[str]:
         # Build a list of all files in the directory and all files
         # in its subdirectories. For performance reasons, do not
         # recurse more than one level into subdirectories.
-        files: List[str] = []
+        files: list[str] = []
         for root, dirs, nondirs in os.walk(path, followlinks=True):
             subdir = root[len(path)+1:]
             if subdir:
@@ -175,14 +172,14 @@ def is_possible_submodule(module, attr):
     return inspect.ismodule(obj)
 
 
-def try_import(mod: str, only_modules=False) -> List[str]:
+def try_import(mod: str, only_modules=False) -> list[str]:
     """
     Try to import given module and return list of potential completions.
     """
     mod = mod.rstrip('.')
     try:
         m = import_module(mod)
-    except:
+    except ImportError:
         return []
 
     m_is_init = '__init__' in (getattr(m, '__file__', '') or '')

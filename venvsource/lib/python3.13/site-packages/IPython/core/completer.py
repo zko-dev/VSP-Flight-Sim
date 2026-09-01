@@ -118,7 +118,7 @@ The built-in matchers include:
 - :any:`back_unicode_name_matcher` and :any:`back_latex_name_matcher`: see `Backward latex completion`_,
 - :any:`IPCompleter.file_matcher`: paths to files and directories,
 - :any:`IPCompleter.python_func_kw_matcher` - function keywords,
-- :any:`IPCompleter.python_matches` - globals and attributes (v1 API),
+- :any:`IPCompleter.python_matcher` - globals and attributes,
 - ``IPCompleter.jedi_matcher`` - static analysis with Jedi,
 - :any:`IPCompleter.custom_completer_matcher` - pluggable completer with a default
   implementation in :any:`InteractiveShell` which uses IPython hooks system
@@ -181,6 +181,7 @@ from __future__ import annotations
 import builtins as builtin_mod
 import enum
 import glob
+import importlib.util
 import inspect
 import itertools
 import keyword
@@ -198,12 +199,11 @@ from ast import literal_eval
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
-from functools import cached_property, partial
-from types import SimpleNamespace
+from functools import cached_property, lru_cache, partial
+from types import ModuleType, SimpleNamespace
 from typing import (
     Union,
     Any,
-    Optional,
     TYPE_CHECKING,
     TypeVar,
     Literal,
@@ -216,7 +216,11 @@ from IPython.core.guarded_eval import (
     _validate_policy_overrides,
 )
 from IPython.core.error import TryNext, UsageError
-from IPython.core.inputtransformer2 import ESC_MAGIC
+from IPython.core.inputtransformer2 import (
+    ESC_MAGIC,
+    SystemAssign,
+    make_tokens_by_line,
+)
 from IPython.core.latex_symbols import latex_symbols, reverse_latex_symbol
 from IPython.testing.skipdoctest import skip_doctest
 from IPython.utils import generics
@@ -241,27 +245,31 @@ from traitlets.utils.importstring import import_item
 
 import __main__
 
-from typing import cast
-
-if sys.version_info < (3, 12):
-    from typing_extensions import TypedDict, Protocol
-    from typing import NotRequired, TypeAlias, TypeGuard
-else:
-    from typing import TypedDict, NotRequired, Protocol, TypeAlias, TypeGuard
+from typing import cast, TypedDict, NotRequired, Protocol, TypeAlias, TypeGuard
 
 
 # skip module docstests
 __skip_doctest__ = True
 
 
-try:
+# jedi is expensive to import (it pulls in parso, which compiles grammars), so
+# only check for its presence here and import it lazily via `_get_jedi()` the
+# first time a completion actually needs it. This keeps `import IPython` fast.
+if TYPE_CHECKING:
     import jedi
-    jedi.settings.case_insensitive_completion = False
-    import jedi.api.helpers
+
+JEDI_INSTALLED = importlib.util.find_spec("jedi") is not None
+
+
+@lru_cache(maxsize=1)
+def _get_jedi() -> ModuleType:
+    """Import, configure, and return the ``jedi`` module (cached)."""
+    import jedi
     import jedi.api.classes
-    JEDI_INSTALLED = True
-except ImportError:
-    JEDI_INSTALLED = False
+    import jedi.api.helpers
+
+    jedi.settings.case_insensitive_completion = False
+    return jedi
 
 
 # -----------------------------------------------------------------------------
@@ -293,6 +301,12 @@ _UNKNOWN_TYPE = "<unknown>"
 
 # sentinel value to signal lack of a match
 not_found = object()
+
+# Regexes compiled once at import time; some of these are used on every
+# completion request, so recompiling them per call would be wasteful.
+_SNAKE_CASE_RE = re.compile(r"[^_]+(_[^_]+)+?\Z")
+_LEADING_DASHES_RE = re.compile(r"^--", re.MULTILINE)
+_IDENTIFIER_END_RE = re.compile(r"\w+$")
 
 class ProvisionalCompleterWarning(FutureWarning):
     """
@@ -336,7 +350,7 @@ def provisionalcompleter(action='ignore'):
         yield
 
 
-def has_open_quotes(s: str) -> Union[str, bool]:
+def has_open_quotes(s: str) -> str | bool:
     """Return whether a string has open quotes.
 
     This simply counts whether the number of quote characters of either type in
@@ -500,7 +514,7 @@ class Completion:
     ``IPython.python_matches``, ``IPython.magics_matches``...).
     """
 
-    __slots__ = ['start', 'end', 'text', 'type', 'signature', '_origin']
+    __slots__ = ["_origin", "end", "signature", "start", "text", "type"]
 
     def __init__(
         self,
@@ -508,7 +522,7 @@ class Completion:
         end: int,
         text: str,
         *,
-        type: Optional[str] = None,
+        type: str | None = None,
         _origin="",
         signature="",
     ) -> None:
@@ -565,7 +579,7 @@ class SimpleCompletion:
 
     __slots__ = ["text", "type"]
 
-    def __init__(self, text: str, *, type: Optional[str] = None):
+    def __init__(self, text: str, *, type: str | None = None):
         self.text = text
         self.type = type
 
@@ -581,7 +595,7 @@ class _MatcherResultBase(TypedDict):
 
     #: Whether to suppress results from all other matchers (True), some
     #: matchers (set of identifiers) or none (False); default is False.
-    suppress: NotRequired[Union[bool, set[str]]]
+    suppress: NotRequired[bool | set[str]]
 
     #: Identifiers of matchers which should NOT be suppressed when this matcher
     #: requests to suppress all other matchers; defaults to an empty set.
@@ -609,7 +623,7 @@ class _JediMatcherResult(_MatcherResultBase):
     completions: Iterator[_JediCompletionLike]
 
 
-AnyMatcherCompletion = Union[_JediCompletionLike, SimpleCompletion]
+AnyMatcherCompletion = _JediCompletionLike | SimpleCompletion
 AnyCompletion = TypeVar("AnyCompletion", AnyMatcherCompletion, Completion)
 
 
@@ -641,7 +655,7 @@ class CompletionContext:
     #: Matchers can use this information to abort early.
     #: The built-in Jedi matcher is currently excepted from this limit.
     # If not given, return all possible completions.
-    limit: Optional[int]
+    limit: int | None
 
     @cached_property
     def text_until_cursor(self) -> str:
@@ -653,7 +667,7 @@ class CompletionContext:
 
 
 #: Matcher results for API v2.
-MatcherResult = Union[SimpleMatcherResult, _JediMatcherResult]
+MatcherResult = SimpleMatcherResult | _JediMatcherResult
 
 
 class _MatcherAPIv1Base(Protocol):
@@ -667,7 +681,7 @@ class _MatcherAPIv1Base(Protocol):
 
 class _MatcherAPIv1Total(_MatcherAPIv1Base, Protocol):
     #: API version
-    matcher_api_version: Optional[Literal[1]]
+    matcher_api_version: Literal[1] | None
 
     def __call__(self, text: str) -> list[str]:
         """Call signature."""
@@ -675,7 +689,7 @@ class _MatcherAPIv1Total(_MatcherAPIv1Base, Protocol):
 
 
 #: Protocol describing Matcher API v1.
-MatcherAPIv1: TypeAlias = Union[_MatcherAPIv1Base, _MatcherAPIv1Total]
+MatcherAPIv1: TypeAlias = _MatcherAPIv1Base | _MatcherAPIv1Total
 
 
 class MatcherAPIv2(Protocol):
@@ -692,7 +706,7 @@ class MatcherAPIv2(Protocol):
     __qualname__: str
 
 
-Matcher: TypeAlias = Union[MatcherAPIv1, MatcherAPIv2]
+Matcher: TypeAlias = MatcherAPIv1 | MatcherAPIv2
 
 
 def _is_matcher_v1(matcher: Matcher) -> TypeGuard[MatcherAPIv1]:
@@ -738,8 +752,8 @@ def has_any_completions(result: MatcherResult) -> bool:
 
 def completion_matcher(
     *,
-    priority: Optional[float] = None,
-    identifier: Optional[str] = None,
+    priority: float | None = None,
+    identifier: str | None = None,
     api_version: int = 1,
 ) -> Callable[[Matcher], Matcher]:
     """Adds attributes describing the matcher.
@@ -967,6 +981,9 @@ class Completer(Configurable):
 
         - ``Completer.evaluation = 'unsafe'``
         - ``Completer.auto_close_dict_keys = True``
+
+        Kept (deprecated, not yet removed) because downstream projects'
+        test suites still set it via ``%config``.
         """,
     ).tag(config=True)
 
@@ -1103,7 +1120,7 @@ class Completer(Configurable):
 
         self.custom_matchers = []
 
-        super(Completer, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
     def complete(self, text, state):
         """Return the next possible completion for 'text'.
@@ -1125,7 +1142,7 @@ class Completer(Configurable):
         except IndexError:
             return None
 
-    def global_matches(self, text: str, context: Optional[CompletionContext] = None):
+    def global_matches(self, text: str, context: CompletionContext | None = None):
         """Compute matches when text is a simple name.
 
         Return a list of all keywords, built-in functions and names currently
@@ -1174,12 +1191,11 @@ class Completer(Configurable):
                 if word[:n] == text and word != "__builtins__":
                     match_append(word)
 
-        snake_case_re = re.compile(r"[^_]+(_[^_]+)+?\Z")
         for lst in [list(self.namespace.keys()), list(self.global_namespace.keys())]:
             shortened = {
                 "_".join([sub[0] for sub in word.split("_")]): word
                 for word in lst
-                if snake_case_re.match(word)
+                if _SNAKE_CASE_RE.match(word)
             }
             for word in shortened.keys():
                 if word[:n] == text and word != "__builtins__":
@@ -1255,7 +1271,7 @@ class Completer(Configurable):
         self,
         text: str,
         include_prefix: bool = True,
-        context: Optional[CompletionContext] = None,
+        context: CompletionContext | None = None,
     ) -> tuple[Sequence[str], str]:
         m2 = self._ATTR_MATCH_RE.match(text)
         if not m2:
@@ -1282,10 +1298,7 @@ class Completer(Configurable):
             if obj is not_found:
                 return [], ""
 
-        if self.limit_to__all__ and hasattr(obj, '__all__'):
-            words = get__all__entries(obj)
-        else:
-            words = dir2(obj)
+        words = dir2(obj)
 
         try:
             words = generics.complete_object(obj, words)
@@ -1330,7 +1343,7 @@ class Completer(Configurable):
             prefix_after_space = ""
 
         return (
-            ["%s.%s" % (prefix_after_space, w) for w in words if w[:n] == attr],
+            ["{}.{}".format(prefix_after_space, w) for w in words if w[:n] == attr],
             "." + attr,
         )
 
@@ -1404,7 +1417,7 @@ class Completer(Configurable):
         return self._auto_import_func
 
 
-def get__all__entries(obj):
+def get__all__entries(obj: Any) -> list[str]:
     """returns the strings in the __all__ attribute"""
     try:
         words = getattr(obj, '__all__')
@@ -1429,7 +1442,7 @@ class _DictKeyState(enum.Flag):
     IN_TUPLE = enum.auto()
 
 
-def _parse_tokens(c):
+def _parse_tokens(c: str) -> list[tokenize.TokenInfo]:
     """Parse tokens even if there is an error."""
     tokens = []
     token_generator = tokenize.generate_tokens(iter(c.splitlines()).__next__)
@@ -1442,7 +1455,7 @@ def _parse_tokens(c):
             return tokens
 
 
-def _match_number_in_dict_key_prefix(prefix: str) -> Union[str, None]:
+def _match_number_in_dict_key_prefix(prefix: str) -> str | None:
     """Match any valid Python numeric literal in a prefix of dictionary keys.
 
     References:
@@ -1485,10 +1498,10 @@ _INT_FORMATS = {
 
 
 def match_dict_keys(
-    keys: list[Union[str, bytes, tuple[Union[str, bytes], ...]]],
+    keys: list[str | bytes | tuple[str | bytes, ...]],
     prefix: str,
     delims: str,
-    extra_prefix: Optional[tuple[Union[str, bytes], ...]] = None,
+    extra_prefix: tuple[str | bytes, ...] | None = None,
 ) -> tuple[str, int, dict[str, _DictKeyState]]:
     """Used by dict_key_matches, matching the prefix to a list of keys
 
@@ -1539,7 +1552,7 @@ def match_dict_keys(
         return True
 
     filtered_key_is_final: dict[
-        Union[str, bytes, int, float], _DictKeyState
+        str | bytes | int | float, _DictKeyState
     ] = defaultdict(lambda: _DictKeyState.BASELINE)
 
     for k in keys:
@@ -1601,7 +1614,7 @@ def match_dict_keys(
 
     matched: dict[str, _DictKeyState] = {}
 
-    str_key: Union[str, bytes]
+    str_key: str | bytes
 
     for key in filtered_keys:
         if isinstance(key, (int, float)):
@@ -1639,7 +1652,7 @@ def match_dict_keys(
             rem_repr = rem_repr.replace('"', '\\"')
 
         # then reinsert prefix from start of token
-        match = "%s%s" % (token_prefix, rem_repr)
+        match = "{}{}".format(token_prefix, rem_repr)
 
         matched[match] = filtered_key_is_final[key]
     return quote, token_start, matched
@@ -1669,7 +1682,7 @@ def cursor_to_position(text:str, line:int, column:int)->int:
 
     """
     lines = text.split('\n')
-    assert line <= len(lines), '{} <= {}'.format(str(line), str(len(lines)))
+    assert line <= len(lines), f'{str(line)} <= {str(len(lines))}'
 
     return sum(len(line) + 1 for line in lines[:line]) + column
 
@@ -1699,7 +1712,7 @@ def position_to_cursor(text: str, offset: int) -> tuple[int, int]:
 
     """
 
-    assert 0 <= offset <= len(text) , "0 <= %s <= %s" % (offset , len(text))
+    assert 0 <= offset <= len(text) , "0 <= {} <= {}".format(offset , len(text))
 
     before = text[:offset]
     blines = before.split('\n')  # ! splitnes trim trailing \n
@@ -1927,7 +1940,7 @@ def _convert_matcher_v1_result_to_v2_no_no(
 def _convert_matcher_v1_result_to_v2(
     matches: Sequence[str],
     type: str,
-    fragment: Optional[str] = None,
+    fragment: str | None = None,
     suppress_if_matches: bool = False,
 ) -> SimpleMatcherResult:
     """Utility to help with transition"""
@@ -1943,7 +1956,7 @@ def _convert_matcher_v1_result_to_v2(
 class IPCompleter(Completer):
     """Extension of the completer class with IPython-specific features"""
 
-    @observe('greedy')
+    @observe("greedy")
     def _greedy_changed(self, change):
         """update the splitter and readline delims when greedy is changed"""
         if change["new"]:
@@ -2023,20 +2036,6 @@ class IPCompleter(Completer):
         When 0: nothing will be excluded.
         """
     ).tag(config=True)
-    limit_to__all__ = Bool(False,
-        help="""
-        DEPRECATED as of version 5.0.
-
-        Instruct the completer to use __all__ for the completion
-
-        Specifically, when completing on ``object.<tab>``.
-
-        When True: only those names in obj.__all__ will be included.
-
-        When False [default]: the __all__ attribute is ignored
-        """,
-    ).tag(config=True)
-
     profile_completions = Bool(
         default_value=False,
         help="If True, emit profiling data for completion subsystem using cProfile."
@@ -2046,13 +2045,6 @@ class IPCompleter(Completer):
         default_value=".completion_profiles",
         help="Template for path at which to output profile data for completions."
     ).tag(config=True)
-
-    @observe('limit_to__all__')
-    def _limit_to_all_changed(self, change):
-        warnings.warn('`IPython.core.IPCompleter.limit_to__all__` configuration '
-            'value has been deprecated since IPython 5.0, will be made to have '
-            'no effects and then removed in future version of IPython.',
-            UserWarning)
 
     def __init__(
         self, shell=None, namespace=None, global_namespace=None, config=None, **kwargs
@@ -2211,9 +2203,22 @@ class IPCompleter(Completer):
         #  starts with `/home/`, `C:\`, etc)
 
         text = context.token
-        code_until_cursor = self._extract_code(context.text_until_cursor)
+        raw_text_until_cursor = context.text_until_cursor
+        code_until_cursor = self._extract_code(raw_text_until_cursor)
+        in_cli_context = self._is_completing_in_cli_context(
+            raw_text_until_cursor
+        ) or self._is_completing_in_cli_context(code_until_cursor)
+        if (
+            not in_cli_context
+            and not self._is_completing_in_string(code_until_cursor)
+            and not self._looks_like_path(text)
+        ):
+            return {
+                "completions": [],
+                "suppress": False,
+            }
+
         completion_type = self._determine_completion_context(code_until_cursor)
-        in_cli_context = self._is_completing_in_cli_context(code_until_cursor)
         if (
             completion_type == self._CompletionContextType.ATTRIBUTE
             and not in_cli_context
@@ -2229,9 +2234,9 @@ class IPCompleter(Completer):
         # when escaped with backslash
         if text.startswith('!'):
             text = text[1:]
-            text_prefix = u'!'
+            text_prefix = '!'
         else:
-            text_prefix = u''
+            text_prefix = ''
 
         text_until_cursor = self.text_until_cursor
         # track strings with open quotes
@@ -2428,9 +2433,9 @@ class IPCompleter(Completer):
 
         if len(texts) > 0 and (texts[0] == 'config' or texts[0] == '%config'):
             # get all configuration classes
-            classes = sorted(set([ c for c in self.shell.configurables
+            classes = sorted({ c for c in self.shell.configurables
                                    if c.__class__.class_traits(config=True)
-                                   ]), key=lambda x: x.__class__.__name__)
+                                   }, key=lambda x: x.__class__.__name__)
             classnames = [ c.__class__.__name__ for c in classes ]
 
             # return all classnames if config or %config is given
@@ -2451,7 +2456,7 @@ class IPCompleter(Completer):
                 cls = classes[classnames.index(classname)].__class__
                 help = cls.class_get_help()
                 # strip leading '--' from cl-args:
-                help = re.sub(re.compile(r'^--', re.MULTILINE), '', help)
+                help = _LEADING_DASHES_RE.sub("", help)
                 return [ attr.split('=')[0]
                          for attr in help.strip().splitlines()
                          if attr.startswith(texts[1]) ]
@@ -2537,9 +2542,9 @@ class IPCompleter(Completer):
                 elif self.omit__names == 0:
                     completion_filter = lambda x:x
                 else:
-                    raise ValueError("Don't understand self.omit__names == {}".format(self.omit__names))
+                    raise ValueError(f"Don't understand self.omit__names == {self.omit__names}")
 
-        interpreter = jedi.Interpreter(text[:offset], namespaces)
+        interpreter = _get_jedi().Interpreter(text[:offset], namespaces)
         try_jedi = True
 
         try:
@@ -2622,6 +2627,8 @@ class IPCompleter(Completer):
         stripped = text.lstrip()
         if stripped.startswith("!") or stripped.startswith("%"):
             return True
+        if self._is_completing_in_system_assignment(text):
+            return True
         # Check for CLI aliases
         try:
             tokens = stripped.split(None, 1)
@@ -2649,6 +2656,26 @@ class IPCompleter(Completer):
             return True
         except Exception:
             return False
+
+    def _is_completing_in_system_assignment(self, text: str) -> bool:
+        """Return True for IPython ``name = !command`` syntax."""
+        try:
+            transform = SystemAssign.find(make_tokens_by_line([text + "\n"]))
+        except Exception:
+            return False
+        return transform is not None and transform.start_col < len(text)
+
+    def _is_completing_in_string(self, text: str) -> bool:
+        """Return True if the cursor is in a string literal, not a comment."""
+        is_string, is_in_expression = self._is_in_string_or_comment(text)
+        if not is_string or is_in_expression:
+            return False
+        return not any(token.type == tokenize.COMMENT for token in _parse_tokens(text))
+
+    def _looks_like_path(self, text: str) -> bool:
+        if text.startswith(("~", "/", "./", "../", ".\\", "..\\")):
+            return True
+        return bool(sys.platform == "win32" and re.match(r"^[a-zA-Z]:[\\/]", text))
 
     def _is_in_string_or_comment(self, text):
         """
@@ -2812,32 +2839,6 @@ class IPCompleter(Completer):
                 suppress=False,
             )
 
-    @completion_matcher(api_version=1)
-    def python_matches(self, text: str) -> Iterable[str]:
-        """Match attributes or global python names.
-
-        .. deprecated:: 8.27
-            You can use :meth:`python_matcher` instead."""
-        if "." in text:
-            try:
-                matches = self.attr_matches(text)
-                if text.endswith('.') and self.omit__names:
-                    if self.omit__names == 1:
-                        # true if txt is _not_ a __ name, false otherwise:
-                        no__name = (lambda txt:
-                                    re.match(r'.*\.__.*?__',txt) is None)
-                    else:
-                        # true if txt is _not_ a _ name, false otherwise:
-                        no__name = (lambda txt:
-                                    re.match(r'\._.*?',txt[txt.rindex('.'):]) is None)
-                    matches = filter(no__name, matches)
-            except NameError:
-                # catches <undefined attributes>.<tab>
-                matches = []
-        else:
-            matches = self.global_matches(text)
-        return matches
-
     def _default_arguments_from_docstring(self, doc):
         """Parse the first line of docstring for call signature.
 
@@ -2904,7 +2905,7 @@ class IPCompleter(Completer):
         matches = self.python_func_kw_matches(context.token)
         return _convert_matcher_v1_result_to_v2_no_no(matches, type="param")
 
-    def python_func_kw_matches(self, text):
+    def python_func_kw_matches(self, text: str) -> list[str]:
         """Match named parameters (kwargs) of the last open function.
 
         .. deprecated:: 8.6
@@ -2940,7 +2941,7 @@ class IPCompleter(Completer):
             return []
         # 2. Concatenate dotted names ("foo.bar" for "foo.bar(x, pa" )
         ids = []
-        isId = re.compile(r'\w+$').match
+        isId = _IDENTIFIER_END_RE.match
 
         while True:
             try:
@@ -2957,7 +2958,7 @@ class IPCompleter(Completer):
         # them again
         usedNamedArgs = set()
         par_level = -1
-        for token, next_token in zip(tokens, tokens[1:]):
+        for token, next_token in itertools.pairwise(tokens):
             if token == '(':
                 par_level += 1
             elif token == ')':
@@ -2981,7 +2982,7 @@ class IPCompleter(Completer):
             for namedArg in set(namedArgs) - usedNamedArgs:
                 if namedArg.startswith(text):
                     argMatches.append("%s=" %namedArg)
-        except:
+        except Exception:
             pass
 
         return argMatches
@@ -3170,7 +3171,7 @@ class IPCompleter(Completer):
         }
 
     @context_matcher()
-    def latex_name_matcher(self, context: CompletionContext):
+    def latex_name_matcher(self, context: CompletionContext) -> SimpleMatcherResult:
         """Match Latex syntax for unicode characters.
 
         This does both ``\\alp`` -> ``\\alpha`` and ``\\alpha`` -> ``α``
@@ -3204,7 +3205,7 @@ class IPCompleter(Completer):
         return '', ()
 
     @context_matcher()
-    def custom_completer_matcher(self, context):
+    def custom_completer_matcher(self, context: CompletionContext) -> SimpleMatcherResult:
         """Dispatch custom completer.
 
         If a match is found, suppresses all other matchers except for Jedi.
@@ -3217,7 +3218,7 @@ class IPCompleter(Completer):
         result["do_not_suppress"] = {_get_matcher_id(self._jedi_matcher)}
         return result
 
-    def dispatch_custom_completer(self, text):
+    def dispatch_custom_completer(self, text: str) -> list[str] | None:
         """
         .. deprecated:: 8.6
             You can use :meth:`custom_completer_matcher` instead.
@@ -3321,7 +3322,7 @@ class IPCompleter(Completer):
                       category=ProvisionalCompleterWarning, stacklevel=2)
 
         seen = set()
-        profiler:Optional[cProfile.Profile]
+        profiler:cProfile.Profile | None
         try:
             if self.profile_completions:
                 import cProfile
@@ -3689,7 +3690,7 @@ class IPCompleter(Completer):
             result["matched_fragment"] = result.get("matched_fragment", context.token)
 
             if not suppressed_matchers:
-                suppression_recommended: Union[bool, set[str]] = result.get(
+                suppression_recommended: bool | set[str] = result.get(
                     "suppress", False
                 )
 
@@ -3754,7 +3755,7 @@ class IPCompleter(Completer):
         return sorted(matches, key=lambda x: completions_sorting_key(x.text))
 
     @context_matcher()
-    def fwd_unicode_matcher(self, context: CompletionContext):
+    def fwd_unicode_matcher(self, context: CompletionContext) -> SimpleMatcherResult:
         """Same as :any:`fwd_unicode_match`, but adopted to new Matcher API."""
         # TODO: use `context.limit` to terminate early once we matched the maximum
         #  number that will be used downstream; can be added as an optional to

@@ -2,7 +2,7 @@ import re
 import asyncio
 import tokenize
 from io import StringIO
-from typing import List, Optional, Union, Tuple, ClassVar, Any
+from typing import ClassVar, Any
 from collections.abc import Callable, Generator
 import warnings
 
@@ -177,7 +177,7 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
     _init_llm_provider: Callable | None
 
     _llm_provider_instance: Any | None
-    _llm_prefixer: Callable = lambda self, x: "wrong"
+    _llm_prefixer: Callable = lambda self, x: ""
 
     def __init__(self):
         super().__init__()
@@ -193,8 +193,9 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
     def disconnect(self) -> None:
         self._cancel_running_llm_task()
         for pt_app in self._connected_apps:
-            text_insert_event = pt_app.default_buffer.on_text_insert
-            text_insert_event.remove_handler(self.reset_history_position)
+            pt_app.default_buffer.on_text_insert.remove_handler(self.reset_history_position)
+            pt_app.default_buffer.on_cursor_position_changed.remove_handler(self._dismiss)
+        self._connected_apps = []
 
     def connect(self, pt_app: PromptSession) -> None:
         self._connected_apps.append(pt_app)
@@ -205,7 +206,7 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
 
     def get_suggestion(
         self, buffer: Buffer, document: Document
-    ) -> Optional[Suggestion]:
+    ) -> Suggestion | None:
         text = _get_query(document)
 
         if text.strip():
@@ -222,7 +223,7 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
 
     def _find_match(
         self, text: str, skip_lines: float, history: History, previous: bool
-    ) -> Generator[Tuple[str, float], None, None]:
+    ) -> Generator[tuple[str, float], None, None]:
         """
         text : str
             Text content to find a match for, the user cursor is most of the
@@ -263,7 +264,7 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
 
     def _find_next_match(
         self, text: str, skip_lines: float, history: History
-    ) -> Generator[Tuple[str, float], None, None]:
+    ) -> Generator[tuple[str, float], None, None]:
         return self._find_match(text, skip_lines, history, previous=False)
 
     def _find_previous_match(self, text: str, skip_lines: float, history: History):
@@ -363,7 +364,10 @@ class NavigableAutoSuggestFromHistory(AutoSuggestFromHistory):
 
         # here we need a cancellable task so we can't just await the error caught
         self._llm_task = asyncio.create_task(error_catcher(buffer))
-        await self._llm_task
+        try:
+            await self._llm_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     async def _trigger_llm_core(self, buffer: Buffer):
         """
@@ -570,7 +574,7 @@ def accept_token(event: KeyPressEvent):
         prefix = _get_query(b.document)
         text = prefix + suggestion.text
 
-        tokens: List[Optional[str]] = [None, None, None]
+        tokens: list[str | None] = [None, None, None]
         substrings = [""]
         i = 0
 
@@ -603,7 +607,7 @@ def accept_token(event: KeyPressEvent):
     nc.forward_word(event)
 
 
-Provider = Union[AutoSuggestFromHistory, NavigableAutoSuggestFromHistory, None]
+Provider = AutoSuggestFromHistory | NavigableAutoSuggestFromHistory | None
 
 
 def _swap_autosuggestion(

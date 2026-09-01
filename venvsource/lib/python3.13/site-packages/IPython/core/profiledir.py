@@ -1,4 +1,3 @@
-# encoding: utf-8
 """An object for managing IPython profile directories."""
 
 # Copyright (c) IPython Development Team.
@@ -13,8 +12,6 @@ from traitlets.config.configurable import LoggingConfigurable
 from ..paths import get_ipython_package_dir
 from ..utils.path import expand_path, ensure_dir_exists
 from traitlets import Unicode, Bool, observe
-
-from typing import Optional
 
 #-----------------------------------------------------------------------------
 # Module errors
@@ -43,13 +40,13 @@ class ProfileDir(LoggingConfigurable):
     startup_dir_name = Unicode('startup')
     pid_dir_name = Unicode('pid')
     static_dir_name = Unicode('static')
-    security_dir = Unicode(u'')
-    log_dir = Unicode(u'')
-    startup_dir = Unicode(u'')
-    pid_dir = Unicode(u'')
-    static_dir = Unicode(u'')
+    security_dir = Unicode('')
+    log_dir = Unicode('')
+    startup_dir = Unicode('')
+    pid_dir = Unicode('')
+    static_dir = Unicode('')
 
-    location = Unicode(u'',
+    location = Unicode('',
         help="""Set the profile location directly. This overrides the logic used by the
         `profile` option.""",
         ).tag(config=True)
@@ -71,7 +68,7 @@ class ProfileDir(LoggingConfigurable):
         self.static_dir = os.path.join(new, self.static_dir_name)
         self.check_dirs()
 
-    def _mkdir(self, path: str, mode: Optional[int] = None) -> bool:
+    def _mkdir(self, path: str, mode: int | None = None) -> bool:
         """ensure a directory exists at a given path
 
         This is a version of os.mkdir, with the following differences:
@@ -117,11 +114,11 @@ class ProfileDir(LoggingConfigurable):
                 raise
 
         return True
-    
+
     @observe('log_dir')
     def check_log_dir(self, change=None):
         self._mkdir(self.log_dir)
-    
+
     @observe('startup_dir')
     def check_startup_dir(self, change=None):
         if self._mkdir(self.startup_dir):
@@ -163,9 +160,6 @@ class ProfileDir(LoggingConfigurable):
         dst = Path(os.path.join(self.location, config_file))
         if dst.exists() and not overwrite:
             return False
-        if path is None:
-            path = os.path.join(get_ipython_package_dir(), u'core', u'profile', u'default')
-        assert isinstance(path, Path)
         src = path / config_file
         shutil.copy(src, dst)
         return True
@@ -183,7 +177,7 @@ class ProfileDir(LoggingConfigurable):
         return cls(location=profile_dir, config=config)
 
     @classmethod
-    def create_profile_dir_by_name(cls, path, name=u'default', config=None):
+    def create_profile_dir_by_name(cls, path, name='default', config=None):
         """Create a profile dir by profile name and path.
 
         Parameters
@@ -196,11 +190,11 @@ class ProfileDir(LoggingConfigurable):
         """
         if not os.path.isdir(path):
             raise ProfileDirError('Directory not found: %s' % path)
-        profile_dir = os.path.join(path, u'profile_' + name)
+        profile_dir = os.path.join(path, 'profile_' + name)
         return cls(location=profile_dir, config=config)
 
     @classmethod
-    def find_profile_dir_by_name(cls, ipython_dir, name=u'default', config=None):
+    def find_profile_dir_by_name(cls, ipython_dir, name='default', config=None):
         """Find an existing profile dir by profile name, return its ProfileDir.
 
         This searches through a sequence of paths for a profile dir.  If it
@@ -218,7 +212,7 @@ class ProfileDir(LoggingConfigurable):
             The name of the profile.  The name of the profile directory
             will be "profile_<profile>".
         """
-        dirname = u'profile_' + name
+        dirname = 'profile_' + name
         paths = [ipython_dir]
         for p in paths:
             profile_dir = os.path.join(p, dirname)

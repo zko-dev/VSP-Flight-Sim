@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Displayhook for IPython.
 
 This defines a callable class that IPython uses for `sys.displayhook`.
@@ -36,7 +35,7 @@ class DisplayHook(Configurable):
     cull_fraction = Float(0.2)
 
     def __init__(self, shell=None, cache_size=1000, **kwargs):
-        super(DisplayHook, self).__init__(shell=shell, **kwargs)
+        super().__init__(shell=shell, **kwargs)
         self._is_active = False
         cache_size_min = 3
         if cache_size <= 0:
@@ -127,7 +126,7 @@ class DisplayHook(Configurable):
         """
         # Use write, not print which adds an extra space.
         sys.stdout.write(self.shell.separate_out)
-        outprompt = 'Out[{}]: '.format(self.shell.execution_count - 1)
+        outprompt = f'Out[{self.shell.execution_count - 1}]: '
         if self.do_full_cache:
             sys.stdout.write(outprompt)
 

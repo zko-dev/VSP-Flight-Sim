@@ -188,7 +188,6 @@ from pathlib import Path
 
 from IPython.utils.text import marquee
 from IPython.utils import openpy
-from IPython.utils import py3compat
 __all__ = ['Demo','IPythonDemo','LineDemo','IPythonLineDemo','DemoError']
 
 class DemoError(Exception): pass
@@ -405,7 +404,7 @@ class Demo:
 
         filename = self.shell.mktempfile(self.src_blocks[index])
         self.shell.hooks.editor(filename, 1)
-        with open(Path(filename), "r", encoding="utf-8") as f:
+        with open(Path(filename), encoding="utf-8") as f:
             new_block = f.read()
         # update the source and colored block
         self.src_blocks[index] = new_block
@@ -475,7 +474,7 @@ class Demo:
                     print(marquee('output:'))
                 else:
                     print(marquee('Press <q> to quit, <Enter> to execute...'), end=' ')
-                    ans = py3compat.input().strip()
+                    ans = input().strip()
                     if ans:
                         print(marquee('Block NOT executed'))
                         return
@@ -487,7 +486,7 @@ class Demo:
             finally:
                 sys.argv = save_argv
 
-        except:
+        except Exception:
             if self.inside_ipython:
                 self.ip_showtb(filename=self.fname)
         else:
@@ -643,7 +642,7 @@ def slide(file_path, noclear=False, format_rst=True, formatter="terminal",
     while not demo.finished:
         demo()
         try:
-            py3compat.input('\n' + delimiter)
+            input('\n' + delimiter)
         except KeyboardInterrupt:
             exit(1)
 

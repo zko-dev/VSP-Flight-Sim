@@ -1,6 +1,6 @@
 name: Kestrel
 
-mass_kg: 1.800
+mass_kg: 2.00
 
 vsp:
   file: OpenVSP/Aircraft.vsp3
@@ -55,7 +55,7 @@ vspaero:
       elevator: [-40, -20, -10, -5, 0, 5, 10, 20, 40]
       aileron: [0]
       mach: [0.05]
-      xcg: [0.032]
+      xcg: [0.040]
       ycg: [0.0]
       zcg: [0.007]
       tag: alpha_elevator

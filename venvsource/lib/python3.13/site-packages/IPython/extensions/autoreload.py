@@ -128,6 +128,7 @@ Some of the known remaining caveats are:
 
 - Reloading a module, or importing the same module by a different name, creates new Enums. These may look the same, but are not.
 """
+from __future__ import annotations
 
 from IPython.core import magic_arguments
 from IPython.core.magic import Magics, magics_class, line_magic
@@ -325,7 +326,7 @@ class ModuleReloader:
                         superreload(m, reload, self.old_objects)
                     if py_filename in self.failed:
                         del self.failed[py_filename]
-                except:
+                except Exception:
                     if not self.hide_errors:
                         logger = logging.getLogger("autoreload")
                         logger.exception(
@@ -353,6 +354,9 @@ func_attrs = [
     "__closure__",
     "__globals__",
     "__dict__",
+    "__kwdefaults__",
+    "__annotations__",
+    "__type_params__",  # PEP 695, Python 3.12+
 ]
 
 
@@ -451,14 +455,6 @@ def update_generic(a, b):
             update(a, b)
             return True
     return False
-
-
-class StrongRef:
-    def __init__(self, obj):
-        self.obj = obj
-
-    def __call__(self):
-        return self.obj
 
 
 mod_attrs = [
@@ -582,7 +578,7 @@ def superreload(
 
     try:
         module = reload(module)
-    except:
+    except Exception:
         # restore module dictionary on failed reload
         module.__dict__.update(old_dict)
         raise
@@ -666,7 +662,7 @@ class AutoreloadMagics(Magics):
 
              '3' or 'complete' - Same as 2/all, but also adds any new
              objects in the module.
-             
+
              By default, a newer autoreload algorithm that diffs the module's source code
              with the previous version and only reloads changed parts is applied for modes
              2 and below. To use the original algorithm, add the `-` suffix to the mode,
@@ -850,7 +846,7 @@ class AutoreloadMagics(Magics):
         if self._reloader.enabled:
             try:
                 self._reloader.check()
-            except:
+            except Exception:
                 pass
 
     def post_execute_hook(self):

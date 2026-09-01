@@ -1,4 +1,3 @@
-# encoding: utf-8
 """A fancy version of Python's builtin :func:`dir` function."""
 
 # Copyright (c) IPython Development Team.
@@ -8,7 +7,8 @@ from __future__ import annotations
 
 import inspect
 import types
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 
 def safe_hasattr(obj: object, attr: str) -> bool:
@@ -18,7 +18,7 @@ def safe_hasattr(obj: object, attr: str) -> bool:
     try:
         getattr(obj, attr)
         return True
-    except:
+    except Exception:
         return False
 
 

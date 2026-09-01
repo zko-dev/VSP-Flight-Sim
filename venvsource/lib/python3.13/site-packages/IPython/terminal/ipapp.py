@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 The :class:`~traitlets.config.application.Application` object for the command
 line :command:`ipython` program.
@@ -67,7 +66,7 @@ class IPAppCrashHandler(CrashHandler):
         contact_name = release.author
         contact_email = release.author_email
         bug_tracker = 'https://github.com/ipython/ipython/issues'
-        super(IPAppCrashHandler,self).__init__(
+        super().__init__(
             app, contact_name, contact_email, bug_tracker
         )
 
@@ -76,7 +75,7 @@ class IPAppCrashHandler(CrashHandler):
 
         sec_sep = self.section_sep
         # Start with parent report
-        report = [super(IPAppCrashHandler, self).make_report(traceback)]
+        report = [super().make_report(traceback)]
         # Add interactive-specific info we may have
         rpt_add = report.append
         try:
@@ -85,7 +84,7 @@ class IPAppCrashHandler(CrashHandler):
                 rpt_add(line)
             rpt_add('\n*** Last line of input (may not be in above history):\n')
             rpt_add(self.app.shell._last_input_line+'\n')
-        except:
+        except Exception:
             pass
 
         return ''.join(report)
@@ -274,7 +273,7 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
     @catch_config_error
     def initialize(self, argv=None):
         """Do actions after construct, but before starting the app."""
-        super(TerminalIPythonApp, self).initialize(argv)
+        super().initialize(argv)
         if self.subapp is not None:
             # don't bother initializing further, starting subapp
             return
@@ -309,12 +308,14 @@ class TerminalIPythonApp(BaseIPythonApplication, InteractiveShellApp):
         # Make sure there is a space below the banner.
         if self.log_level <= logging.INFO: print()
 
-    def _pylab_changed(self, name, old, new):
+    @observe("pylab")
+    def _pylab_changed(self, change):
         """Replace --pylab='inline' with --pylab='auto'"""
-        if new == 'inline':
-            warnings.warn("'inline' not available as pylab backend, "
-                      "using 'auto' instead.")
-            self.pylab = 'auto'
+        if change["new"] == "inline":
+            warnings.warn(
+                "'inline' not available as pylab backend, using 'auto' instead."
+            )
+            self.pylab = "auto"
 
     def start(self):
         if self.subapp is not None:

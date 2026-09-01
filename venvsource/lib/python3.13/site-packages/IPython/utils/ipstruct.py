@@ -1,4 +1,3 @@
-# encoding: utf-8
 """A dict subclass that supports attribute style access.
 
 Authors:
@@ -6,6 +5,7 @@ Authors:
 * Fernando Perez (original)
 * Brian Granger (refactoring to a dict subclass)
 """
+from __future__ import annotations
 from typing import Any
 
 #-----------------------------------------------------------------------------
@@ -377,4 +377,3 @@ class Struct(dict):
                 self[key] = data_dict[key]
             else:
                 self[key] = conflict_solve[key](self[key],data_dict[key])
-

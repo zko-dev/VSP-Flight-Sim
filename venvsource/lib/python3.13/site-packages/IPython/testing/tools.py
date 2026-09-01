@@ -9,6 +9,8 @@ Authors
 # Copyright (c) IPython Development Team.
 # Distributed under the terms of the Modified BSD License.
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 import re
@@ -19,18 +21,16 @@ import unittest
 from contextlib import contextmanager
 from io import StringIO
 from subprocess import Popen, PIPE
+from types import TracebackType
 from unittest.mock import patch
 
 from traitlets.config.loader import Config
 from IPython.utils.process import get_output_error_code
-from IPython.utils.text import list_strings
 from IPython.utils.io import temp_pyfile, Tee
-from IPython.utils import py3compat
+from IPython.utils.encoding import DEFAULT_ENCODING
 
 from . import decorators as dec
 from . import skipdoctest
-from types import TracebackType
-from typing import List, Optional, Tuple, Type
 
 
 # The docstring for full_path doctests differently on win32 (different path
@@ -69,7 +69,7 @@ def full_path(startPath: str, files: list[str]) -> list[str]:
     return [ os.path.join(base,f) for f in files ]
 
 
-def parse_test_output(txt: str) -> Tuple[int, int]:
+def parse_test_output(txt: str) -> tuple[int, int]:
     """Parse the output of a test run and return errors, failures.
 
     Parameters
@@ -115,7 +115,7 @@ def parse_test_output(txt: str) -> Tuple[int, int]:
 parse_test_output.__test__ = False
 
 
-def default_argv() -> List[str]:
+def default_argv() -> list[str]:
     """Return a valid default argv for creating testing instances of ipython"""
 
     return [
@@ -141,7 +141,7 @@ def default_config() -> Config:
     return config
 
 
-def get_ipython_cmd(as_string: bool=False) -> List[str]:
+def get_ipython_cmd(as_string: bool=False) -> list[str]:
     """
     Return appropriate IPython command line name. By default, this will return
     a list that can be used with subprocess.Popen, for example, but passing
@@ -159,7 +159,7 @@ def get_ipython_cmd(as_string: bool=False) -> List[str]:
 
     return ipython_cmd
 
-def ipexec(fname: str, options: Optional[List[str]]=None, commands: Tuple[str, ...]=()) -> Tuple[str, str]:
+def ipexec(fname: str, options: list[str] | None=None, commands: tuple[str, ...]=()) -> tuple[str, str]:
     """Utility to call 'ipython filename'.
 
     Starts IPython with a minimal and safe configuration to make startup as fast
@@ -208,8 +208,8 @@ def ipexec(fname: str, options: Optional[List[str]]=None, commands: Tuple[str, .
         if not isinstance(v, str):
             print(k, v)
     p = Popen(full_cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE, env=env)
-    out, err = p.communicate(input=py3compat.encode('\n'.join(commands)) or None)
-    out, err = py3compat.decode(out), py3compat.decode(err)
+    out, err = p.communicate(input=('\n'.join(commands).encode(DEFAULT_ENCODING, "replace")) or None)
+    out, err = out.decode(DEFAULT_ENCODING, "replace"), err.decode(DEFAULT_ENCODING, "replace")
     # `import readline` causes 'ESC[?1034h' to be output sometimes,
     # so strip that out before doing comparisons
     if out:
@@ -218,7 +218,7 @@ def ipexec(fname: str, options: Optional[List[str]]=None, commands: Tuple[str, .
 
 
 def ipexec_validate(fname: str, expected_out: str, expected_err: str='',
-                    options: Optional[List[str]]=None, commands: Tuple[str, ...]=()):
+                    options: list[str] | None=None, commands: tuple[str, ...]=()):
     """Utility to call 'ipython filename' and validate output/error.
 
     This function raises an AssertionError if the validation fails.
@@ -286,7 +286,7 @@ class TempFileMixin(unittest.TestCase):
                 # win32, there's nothing to cleanup.
                 try:
                     os.unlink(fname)
-                except:
+                except OSError:
                     # On Windows, even though we close the file, we still can't
                     # delete it.  I have no clue why
                     pass
@@ -333,7 +333,7 @@ class AssertPrints:
         self.tee = Tee(self.buffer, channel=self.channel)
         setattr(sys, self.channel, self.buffer if self.suppress else self.tee)
 
-    def __exit__(self, etype: Optional[Type[BaseException]], value: Optional[BaseException], traceback: Optional[TracebackType]):
+    def __exit__(self, etype: type[BaseException] | None, value: BaseException | None, traceback: TracebackType | None):
         __tracebackhide__ = True
 
         try:
@@ -433,4 +433,3 @@ def help_all_output_test(subcommand=''):
     assert "Options" in out
     assert "Class" in out
     return out, err
-

@@ -18,6 +18,8 @@ Authors:
 # Imports
 #-----------------------------------------------------------------------------
 
+from __future__ import annotations
+
 import sys
 import traceback
 from pprint import pformat
@@ -25,15 +27,19 @@ from pathlib import Path
 
 import builtins as builtin_mod
 
+from typing import TYPE_CHECKING
+
 from IPython.core import ultratb
-from IPython.core.application import Application
 from IPython.core.release import author_email
 from IPython.utils.sysinfo import sys_info
 
 from IPython.core.release import __version__ as version
 
-from typing import Optional, Dict
 import types
+
+if TYPE_CHECKING:
+    # avoid a circular import: application imports crashhandler at module load
+    from IPython.core.application import Application
 
 #-----------------------------------------------------------------------------
 # Code
@@ -97,14 +103,14 @@ class CrashHandler:
 
     message_template = _default_message_template
     section_sep = '\n\n'+'*'*75+'\n\n'
-    info: Dict[str, Optional[str]]
+    info: dict[str, str | None]
 
     def __init__(
         self,
         app: Application,
-        contact_name: Optional[str] = None,
-        contact_email: Optional[str] = None,
-        bug_tracker: Optional[str] = None,
+        contact_name: str | None = None,
+        contact_email: str | None = None,
+        bug_tracker: str | None = None,
         show_crash_traceback: bool = True,
         call_pdb: bool = False,
     ):
@@ -157,7 +163,6 @@ class CrashHandler:
         # this prevents unlikely errors in the crash handling from entering an
         # infinite loop.
         sys.excepthook = sys.__excepthook__
-        
 
         # Use this ONLY for developer debugging (keep commented out for release)
         ipython_dir = getattr(self.app, "ipython_dir", None)
@@ -191,7 +196,7 @@ class CrashHandler:
         # and generate a complete report on disk
         try:
             report = open(report_name, "w", encoding="utf-8")
-        except:
+        except OSError:
             print('Could not create crash report on disk.', file=sys.stderr)
             return
 
@@ -220,7 +225,7 @@ class CrashHandler:
             rpt_add("Application name: %s\n\n" % self.app.name)
             rpt_add("Current user configuration structure:\n\n")
             rpt_add(config)
-        except:
+        except Exception:
             pass
         rpt_add(sec_sep+'Crash traceback:\n\n' + traceback)
 
@@ -232,7 +237,7 @@ def crash_handler_lite(
 ) -> None:
     """a light excepthook, adding a small message to the usual traceback"""
     traceback.print_exception(etype, evalue, tb)
-    
+
     from IPython.core.interactiveshell import InteractiveShell
     if InteractiveShell.initialized():
         # we are in a Shell environment, give %magic example
@@ -241,4 +246,3 @@ def crash_handler_lite(
         # we are not in a shell, show generic config
         config = "c."
     print(_lite_message_template.format(email=author_email, config=config, version=version), file=sys.stderr)
-

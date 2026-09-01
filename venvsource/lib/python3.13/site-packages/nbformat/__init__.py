@@ -16,23 +16,23 @@ from ._version import __version__, version_info
 from .sentinel import Sentinel
 
 __all__ = [
-    "versions",
-    "validate",
-    "ValidationError",
-    "convert",
-    "from_dict",
+    "NO_CONVERT",
+    "NBFormatError",
     "NotebookNode",
+    "Sentinel",
+    "ValidationError",
+    "__version__",
+    "convert",
     "current_nbformat",
     "current_nbformat_minor",
-    "NBFormatError",
-    "NO_CONVERT",
-    "reads",
+    "from_dict",
     "read",
-    "writes",
-    "write",
+    "reads",
+    "validate",
     "version_info",
-    "__version__",
-    "Sentinel",
+    "versions",
+    "write",
+    "writes",
 ]
 
 versions = {
@@ -42,12 +42,12 @@ versions = {
     4: v4,
 }
 
-from . import reader  # noqa: E402
-from .converter import convert  # noqa: E402
-from .notebooknode import NotebookNode, from_dict  # noqa: E402
-from .v4 import nbformat as current_nbformat  # noqa: E402
-from .v4 import nbformat_minor as current_nbformat_minor  # noqa: E402
-from .validator import ValidationError, validate  # noqa: E402
+from . import reader
+from .converter import convert
+from .notebooknode import NotebookNode, from_dict
+from .v4 import nbformat as current_nbformat
+from .v4 import nbformat_minor as current_nbformat_minor
+from .validator import ValidationError, validate
 
 
 class NBFormatError(ValueError):

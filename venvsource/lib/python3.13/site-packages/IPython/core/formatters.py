@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Display formatters.
 
 This module defines the base instances in order to implement custom
@@ -71,7 +70,7 @@ import traceback
 import warnings
 from io import StringIO
 
-from decorator import decorator
+from functools import wraps
 
 from traitlets.config.configurable import Configurable
 from .getipython import get_ipython
@@ -234,11 +233,7 @@ class DisplayFormatter(Configurable):
                 continue
 
             md = None
-            try:
-                data = formatter(obj)
-            except:
-                # FIXME: log the exception
-                raise
+            data = formatter(obj)
 
             # formatters can return raw data or (data, metadata)
             if isinstance(data, tuple) and len(data) == 2:
@@ -275,23 +270,27 @@ def _safe_repr(obj):
 class FormatterWarning(UserWarning):
     """Warning class for errors in formatters"""
 
-@decorator
-def catch_format_error(method, self, *args, **kwargs):
+def catch_format_error(method):
     """show traceback on failed format call"""
-    try:
-        r = method(self, *args, **kwargs)
-    except NotImplementedError:
-        # don't warn on NotImplementedErrors
-        return self._check_return(None, args[0])
-    except Exception:
-        exc_info = sys.exc_info()
-        ip = get_ipython()
-        if ip is not None:
-            ip.showtraceback(exc_info)
-        else:
-            traceback.print_exception(*exc_info)
-        return self._check_return(None, args[0])
-    return self._check_return(r, args[0])
+
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            r = method(self, *args, **kwargs)
+        except NotImplementedError:
+            # don't warn on NotImplementedErrors
+            return self._check_return(None, args[0])
+        except Exception:
+            exc_info = sys.exc_info()
+            ip = get_ipython()
+            if ip is not None:
+                ip.showtraceback(exc_info)
+            else:
+                traceback.print_exception(*exc_info)
+            return self._check_return(None, args[0])
+        return self._check_return(r, args[0])
+
+    return wrapper
 
 
 class FormatterABC(metaclass=abc.ABCMeta):
@@ -487,7 +486,7 @@ class BaseFormatter(Configurable):
                     return self.type_printers[cls]
 
         # If we have reached here, the lookup failed.
-        raise KeyError("No registered printer for {0!r}".format(typ))
+        raise KeyError(f"No registered printer for {typ!r}")
 
     def for_type(self, typ, func=None):
         """Add a format function for a given type.
@@ -608,7 +607,7 @@ class BaseFormatter(Configurable):
             else:
                 old = self.deferred_printers.pop(_mod_name_key(typ), default)
         if old is _raise_key_error:
-            raise KeyError("No registered value for {0!r}".format(typ))
+            raise KeyError(f"No registered value for {typ!r}")
         return old
 
     def _in_deferred_types(self, cls):
@@ -908,7 +907,7 @@ class JSONFormatter(BaseFormatter):
         if md is not None:
             # put the tuple back together
             r = (r, md)
-        return super(JSONFormatter, self)._check_return(r, obj)
+        return super()._check_return(r, obj)
 
 
 class JavascriptFormatter(BaseFormatter):
@@ -1004,7 +1003,7 @@ class MimeBundleFormatter(BaseFormatter):
     _return_type = dict
 
     def _check_return(self, r, obj):
-        r = super(MimeBundleFormatter, self)._check_return(r, obj)
+        r = super()._check_return(r, obj)
         # always return (data, metadata):
         if r is None:
             return {}, {}

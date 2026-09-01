@@ -8,7 +8,6 @@ prefilter.
 # -----------------------------------------------------------------------------
 
 import re
-import sys
 import warnings
 
 from IPython.core.oinspect import OInfo
@@ -137,7 +136,7 @@ class LineInfo:
         Does cache the results of the call, so can be called multiple times
         without worrying about *further* damaging state.
 
-        .. deprecated:: 9.8
+        .. deprecated:: 9.9
             Use ``shell._ofind(line_info.ifun)`` directly instead.
         """
         warnings.warn(
@@ -149,7 +148,7 @@ class LineInfo:
         return ip._ofind(self.ifun)
 
     def __str__(self) -> str:
-        return "LineInfo [%s|%s|%s|%s]" % (self.pre, self.esc, self.ifun, self.the_rest)
+        return "LineInfo [{}|{}|{}|{}]".format(self.pre, self.esc, self.ifun, self.the_rest)
 
     def __repr__(self) -> str:
         return "<" + str(self) + ">"

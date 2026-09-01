@@ -69,13 +69,13 @@ def str_to_array(s):
 
     # Need to make sure eval() knows about inf and nan.
     # This also assumes default printoptions for NumPy.
-    from numpy import inf, nan
+    from numpy import inf, nan  # noqa: F401
 
-    if s.startswith(u'array'):
+    if s.startswith('array'):
         # Remove array( and )
         s = s[6:-1]
 
-    if s.startswith(u'['):
+    if s.startswith('['):
         a = np.array(eval(s), dtype=float)
     else:
         # Assume its a regular float. Force 1D so we can index into it.
@@ -109,13 +109,13 @@ def float_doctest(sphinx_shell, args, input_lines, found, submitted):
             atol = float(args[3])
         except IndexError:
             e = ("Both `rtol` and `atol` must be specified "
-                 "if either are specified: {0}".format(args))
+                 "if either are specified: {}".format(args))
             raise IndexError(e) from e
 
     try:
         submitted = str_to_array(submitted)
         found = str_to_array(found)
-    except:
+    except Exception:
         # For example, if the array is huge and there are ellipsis in it.
         error = True
     else:

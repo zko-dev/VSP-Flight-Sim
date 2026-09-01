@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 System command aliases.
 
@@ -7,6 +6,7 @@ Authors:
 * Fernando Perez
 * Brian Granger
 """
+from __future__ import annotations
 
 #-----------------------------------------------------------------------------
 #  Copyright (C) 2008-2011  The IPython Development Team
@@ -30,8 +30,6 @@ from .error import UsageError
 from traitlets import List, Instance
 from logging import error
 
-import typing as t
-
 
 #-----------------------------------------------------------------------------
 # Utilities
@@ -40,7 +38,7 @@ import typing as t
 # This is used as the pattern for calls to split_user_input.
 shell_line_split = re.compile(r'^(\s*)()(\S+)(.*$)')
 
-def default_aliases() -> t.List[t.Tuple[str, str]]:
+def default_aliases() -> list[tuple[str, str]]:
     """Return list of shell aliases to auto-define.
     """
     # Note: the aliases defined here should be safe to use on a kernel
@@ -134,7 +132,7 @@ class Alias:
         self.shell = shell
         self.name = name
         self.cmd = cmd
-        self.__doc__ = "Alias for `!{}`".format(cmd)
+        self.__doc__ = f"Alias for `!{cmd}`"
         self.nargs = self.validate()
 
     def validate(self):
@@ -156,7 +154,7 @@ class Alias:
                                     "got: %r" % self.cmd)
 
         nargs = self.cmd.count('%s') - self.cmd.count('%%s')
-  
+
         if (nargs > 0) and (self.cmd.find('%l') >= 0):
             raise InvalidAliasError('The %s and %l specifiers are mutually '
                                     'exclusive in alias definitions.')
@@ -164,7 +162,7 @@ class Alias:
         return nargs
 
     def __repr__(self):
-        return "<alias {} for {!r}>".format(self.name, self.cmd)
+        return f"<alias {self.name} for {self.cmd!r}>"
 
     def __call__(self, rest=''):
         cmd = self.cmd
@@ -173,19 +171,19 @@ class Alias:
         if cmd.find('%l') >= 0:
             cmd = cmd.replace('%l', rest)
             rest = ''
-        
+
         if nargs==0:
             if cmd.find('%%s') >= 1:
                 cmd = cmd.replace('%%s', '%s')
             # Simple, argument-less aliases
-            cmd = '%s %s' % (cmd, rest)
+            cmd = '{} {}'.format(cmd, rest)
         else:
             # Handle aliases with positional arguments
             args = rest.split(None, nargs)
             if len(args) < nargs:
                 raise UsageError('Alias <%s> requires %s arguments, %s given.' %
                       (self.name, nargs, len(args)))
-            cmd = '%s %s' % (cmd % tuple(args[:nargs]),' '.join(args[nargs:]))
+            cmd = '{} {}'.format(cmd % tuple(args[:nargs]),' '.join(args[nargs:]))
 
         self.shell.system(cmd)
 
@@ -201,7 +199,7 @@ class AliasManager(Configurable):
     )
 
     def __init__(self, shell=None, **kwargs):
-        super(AliasManager, self).__init__(shell=shell, **kwargs)
+        super().__init__(shell=shell, **kwargs)
         # For convenient access
         if self.shell is not None:
             self.linemagics = self.shell.magics_manager.magics["line"]

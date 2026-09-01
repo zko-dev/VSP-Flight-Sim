@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 Utilities for timing code execution.
 """
@@ -17,7 +16,8 @@ Utilities for timing code execution.
 from __future__ import annotations
 
 import time
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 #-----------------------------------------------------------------------------
 # Code
@@ -76,7 +76,7 @@ else:
         This just returns process_time() and zero."""
         return time.process_time(), 0.0
 
-    
+
 def timings_out(
     reps: int,
     func: Callable[..., Any],
@@ -133,4 +133,3 @@ def timing(func: Callable[..., Any], *args: Any, **kw: Any) -> float:
     seconds. This is just the first value in timings_out()."""
 
     return timings_out(1,func,*args,**kw)[0]
-

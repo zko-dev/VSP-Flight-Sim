@@ -43,16 +43,9 @@ from pathlib import Path
 
 import os, stat, time
 
-try:
-    import collections.abc as collections_abc
-except ImportError:
-    import collections as collections_abc
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
+import collections.abc as collections_abc
+import pickle
 import errno
-import sys
 
 
 def gethashfile(key):
@@ -96,7 +89,7 @@ class PickleShareDB(collections_abc.MutableMapping):
             # The cached item has expired, need to read
             with fil.open("rb") as f:
                 obj = pickle.loads(f.read())
-        except:
+        except Exception:
             raise KeyError(key)
 
         self.cache[fil] = (obj, mtime)
@@ -297,7 +290,7 @@ class PickleShareLink:
     def __repr__(self):
         db = self.__dict__["db"]
         keys = db.keys(self.__dict__["keydir"] + "/*")
-        return "<PickleShareLink '%s': %s>" % (
+        return "<PickleShareLink '{}': {}>".format(
             self.__dict__["keydir"],
             ";".join([Path(k).basename() for k in keys]),
         )
