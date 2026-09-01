@@ -41,7 +41,7 @@ propulsion:
   motor_test_csv: data/eco2_2807_1500kv_8x6.csv
 
 vspaero:
-  analysis_mode: alpha_elevator
+  analysis_mode: alpha_elevator #edit this to change mode
 
   omp_threads: 8
   num_wake_nodes: 16
@@ -50,7 +50,7 @@ vspaero:
 
   batch_presets:
     alpha_elevator:
-      alpha: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
+      alpha: [-12, -8, -6, -4, -2, 0, 2, 4, 6, 8]
       beta: [0]
       elevator: [-40, -20, -10, -5, 0, 5, 10, 20, 40]
       aileron: [0]
