@@ -5,8 +5,17 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
-from dash import Dash, dcc, html, Input, Output
-
+from dash import Dash, dcc, html, Input, Output, State
+from xfoil_run import (
+    WORKDIR as XFOIL_WORKDIR,
+    REYNOLDS as XFOIL_REYNOLDS,
+    MACH as XFOIL_MACH,
+    ALPHA_MIN as XFOIL_ALPHA_MIN,
+    ALPHA_MAX as XFOIL_ALPHA_MAX,
+    run_xfoil,
+    load_polar as load_xfoil_polar,
+    analyze_polar,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = ROOT / "output"
@@ -293,10 +302,40 @@ def make_summary_table(selected_cases):
         },
     )
 
+def list_xfoil_airfoils():
+    return sorted(XFOIL_WORKDIR.glob("*-selig.dat"))
+
+def empty_figure(title):
+    fig = go.Figure()
+
+    fig.update_layout(
+        title=title,
+        template="plotly_white",
+        height=500,
+    )
+
+    return fig
 
 def create_app():
     performance_files = list_performance_comparison_files()
     vspaero_files = list_vspaero_comparison_files(include_latest=False)
+
+    # XFOIL airfoils
+    xfoil_airfoils = list_xfoil_airfoils()
+
+    xfoil_options = [
+        {
+            "label": path.stem,
+            "value": str(path),
+        }
+        for path in xfoil_airfoils
+    ]
+
+    xfoil_default = (
+        str(xfoil_airfoils[0])
+        if xfoil_airfoils
+        else None
+    )
 
     performance_options = [{"label": "latest", "value": "latest"}] + [
     {"label": study_name_from_path(f, "performance_table_"), "value": str(f)}
@@ -439,6 +478,96 @@ def create_app():
                 },
             ),
             dcc.Graph(id="vsp-surface-comparison-graph"),
+            html.Hr(),
+
+            html.H2("XFOIL Airfoil Analysis"),
+
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Label("Airfoil"),
+
+                            dcc.Dropdown(
+                                id="xfoil-airfoil",
+                                options=xfoil_options,
+                                value=xfoil_default,
+                                clearable=False,
+                                placeholder="No *-selig.dat airfoils found",
+                            ),
+                        ]
+                    ),
+
+                    html.Button(
+                        "Run XFOIL",
+                        id="xfoil-run-button",
+                        n_clicks=0,
+                        disabled=not bool(xfoil_airfoils),
+                        style={
+                            "height": "38px",
+                        },
+                    ),
+                ],
+                style={
+                    "display": "grid",
+                    "gridTemplateColumns": "minmax(320px, 620px) auto",
+                    "gap": "12px",
+                    "alignItems": "end",
+                    "marginBottom": "16px",
+                },
+            ),
+
+            dcc.Loading(
+                type="default",
+                children=html.Div(
+                    [
+                        html.Div(
+                            id="xfoil-summary",
+                            style={
+                                "marginBottom": "18px",
+                            },
+                        ),
+
+                        html.Div(
+                            [
+                                dcc.Graph(
+                                    id="xfoil-lift-graph",
+                                    figure=empty_figure(
+                                        "Run XFOIL to display lift curve"
+                                    ),
+                                ),
+
+                                dcc.Graph(
+                                    id="xfoil-drag-graph",
+                                    figure=empty_figure(
+                                        "Run XFOIL to display drag polar"
+                                    ),
+                                ),
+
+                                dcc.Graph(
+                                    id="xfoil-ld-graph",
+                                    figure=empty_figure(
+                                        "Run XFOIL to display L/D"
+                                    ),
+                                ),
+
+                                dcc.Graph(
+                                    id="xfoil-cm-graph",
+                                    figure=empty_figure(
+                                        "Run XFOIL to display pitching moment"
+                                    ),
+                                ),
+                            ],
+                            style={
+                                "display": "grid",
+                                "gridTemplateColumns":
+                                    "repeat(2, minmax(0, 1fr))",
+                                "gap": "12px",
+                            },
+                        ),
+                    ]
+                ),
+            ),
         ],
         style={
             "fontFamily": "Arial, sans-serif",
@@ -542,6 +671,76 @@ def create_app():
             z_col,
             mode,
         )
+    @app.callback(
+        Output("xfoil-summary", "children"),
+        Output("xfoil-lift-graph", "figure"),
+        Output("xfoil-drag-graph", "figure"),
+        Output("xfoil-ld-graph", "figure"),
+        Output("xfoil-cm-graph", "figure"),
+        Input("xfoil-run-button", "n_clicks"),
+        State("xfoil-airfoil", "value"),
+        prevent_initial_call=True,
+    )
+    def update_xfoil_analysis(n_clicks, airfoil_value):
+
+        if not airfoil_value:
+            blank = empty_figure("No XFOIL result")
+
+            return (
+                html.Div("No airfoil selected."),
+                blank,
+                blank,
+                blank,
+                blank,
+            )
+
+        airfoil_path = Path(airfoil_value)
+
+        try:
+            positive_path, negative_path = run_xfoil(
+                airfoil_path
+            )
+
+            polar_df = load_xfoil_polar(
+                positive_path,
+                negative_path,
+            )
+
+            results = analyze_polar(
+                polar_df
+            )
+
+            figures = make_xfoil_figures(
+                polar_df
+            )
+
+            return (
+                make_xfoil_summary(
+                    airfoil_path,
+                    results,
+                ),
+                *figures,
+            )
+
+        except Exception as exc:
+            blank = empty_figure(
+                "XFOIL run failed"
+            )
+
+            error = html.Div(
+                [
+                    html.Strong("XFOIL run failed: "),
+                    html.Code(str(exc)),
+                ]
+            )
+
+            return (
+                error,
+                blank,
+                blank,
+                blank,
+                blank,
+            )    
     return app
 
 def load_named_csvs(files, prefix):
@@ -561,7 +760,6 @@ def load_named_csvs(files, prefix):
 
 def make_performance_comparison(files, y_col, valid_only=True):
     df = load_named_csvs(files, "performance_table_")
-
     if df.empty:
         fig = go.Figure()
         fig.update_layout(
@@ -732,7 +930,221 @@ def make_vspaero_surface_comparison(files, x_col, y_col, z_col, mode):
     )
     return fig
 
+def make_xfoil_summary(airfoil_path, results):
 
+    def value_or_unresolved(value, fmt):
+        return "UNRESOLVED" if value is None else format(value, fmt)
+
+    # --------------------------------------------------
+    # 1. Build summary table data
+    # --------------------------------------------------
+
+    rows = [
+        ("Airfoil", Path(airfoil_path).stem),
+
+        ("Reynolds", f"{XFOIL_REYNOLDS:,}"),
+
+        ("Mach", f"{XFOIL_MACH:g}"),
+
+        (
+            "Requested α range",
+            f"{XFOIL_ALPHA_MIN:.1f}° → {XFOIL_ALPHA_MAX:.1f}°",
+        ),
+
+        (
+            "Converged α range",
+            f"{results['actual_alpha_min_deg']:.1f}° → "
+            f"{results['actual_alpha_max_deg']:.1f}°",
+        ),
+
+        (
+            "CLmax",
+            value_or_unresolved(
+                results["CL_max"],
+                ".4f",
+            ),
+        ),
+
+        (
+            "α at CLmax",
+            "UNRESOLVED"
+            if results["alpha_CL_max_deg"] is None
+            else f"{results['alpha_CL_max_deg']:.2f}°",
+        ),
+
+        (
+            "CLmin",
+            value_or_unresolved(
+                results["CL_min"],
+                ".4f",
+            ),
+        ),
+
+        (
+            "α at CLmin",
+            "UNRESOLVED"
+            if results["alpha_CL_min_deg"] is None
+            else f"{results['alpha_CL_min_deg']:.2f}°",
+        ),
+
+        (
+            "Max L/D",
+            f"{results['LD_max']:.2f}",
+        ),
+
+        (
+            "α at max L/D",
+            f"{results['alpha_LD_max_deg']:.2f}°",
+        ),
+    ]
+
+
+    # --------------------------------------------------
+    # 2. ADD THE WARNING CODE HERE
+    # --------------------------------------------------
+
+    warnings = []
+
+    if not results["negative_sweep_complete"]:
+        warnings.append(
+            f"Negative-alpha sweep did not reach "
+            f"{XFOIL_ALPHA_MIN:.1f}°. "
+            "CLmin is unresolved."
+        )
+
+    if not results["positive_sweep_complete"]:
+        warnings.append(
+            f"Positive-alpha sweep did not reach "
+            f"{XFOIL_ALPHA_MAX:.1f}°. "
+            "CLmax is unresolved."
+        )
+
+    if results["CL_max_at_boundary"]:
+        warnings.append(
+            "Highest converged CL occurs at a sweep boundary."
+        )
+
+    if results["CL_min_at_boundary"]:
+        warnings.append(
+            "Lowest converged CL occurs at a sweep boundary."
+        )
+
+
+    # --------------------------------------------------
+    # 3. ADD THE DASH HTML RETURN HERE
+    # --------------------------------------------------
+
+    return html.Div(
+        [
+            html.Table(
+                html.Tbody(
+                    [
+                        html.Tr(
+                            [
+                                html.Th(
+                                    label,
+                                    style={
+                                        "textAlign": "left",
+                                        "padding": "6px 18px 6px 0",
+                                    },
+                                ),
+
+                                html.Td(
+                                    value,
+                                    style={
+                                        "padding": "6px 0",
+                                    },
+                                ),
+                            ]
+                        )
+                        for label, value in rows
+                    ]
+                )
+            ),
+
+            html.Div(
+                [
+                    html.Div(
+                        f"⚠ {warning}"
+                    )
+                    for warning in warnings
+                ],
+                style={
+                    "marginTop": "12px",
+                    "fontWeight": "600",
+                },
+            )
+            if warnings
+            else html.Div(),
+        ]
+    )
+
+def make_xfoil_figures(df):
+
+    lift = px.line(
+        df,
+        x="alpha",
+        y="CL",
+        markers=True,
+        title="XFOIL Lift Curve",
+    )
+
+    lift.update_layout(
+        template="plotly_white",
+        height=500,
+        xaxis_title="Alpha [deg]",
+        yaxis_title="CL",
+    )
+
+
+    drag = px.line(
+        df,
+        x="CD",
+        y="CL",
+        markers=True,
+        title="XFOIL Drag Polar",
+    )
+
+    drag.update_layout(
+        template="plotly_white",
+        height=500,
+        xaxis_title="CD",
+        yaxis_title="CL",
+    )
+
+
+    ld = px.line(
+        df,
+        x="alpha",
+        y="L_D",
+        markers=True,
+        title="XFOIL Lift-to-Drag Ratio",
+    )
+
+    ld.update_layout(
+        template="plotly_white",
+        height=500,
+        xaxis_title="Alpha [deg]",
+        yaxis_title="L/D",
+    )
+
+
+    moment = px.line(
+        df,
+        x="alpha",
+        y="CM",
+        markers=True,
+        title="XFOIL Pitching Moment",
+    )
+
+    moment.update_layout(
+        template="plotly_white",
+        height=500,
+        xaxis_title="Alpha [deg]",
+        yaxis_title="CM",
+    )
+
+    return lift, drag, ld, moment
 
 if __name__ == "__main__":
     app = create_app()

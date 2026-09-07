@@ -1,6 +1,6 @@
 name: Kestrel
 
-mass_kg: 2.00
+mass_kg: 1.80
 
 vsp:
   file: OpenVSP/Aircraft.vsp3
@@ -31,7 +31,7 @@ eta_motor: 0.85
 eta_esc: 0.95
 
 battery:
-  voltage_V: 14.8
+  voltage_V: 14.8 #4s2p li ion
   capacity_Ah: 8.4
   usable_fraction: 0.8
 

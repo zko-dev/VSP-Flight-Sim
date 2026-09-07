@@ -233,6 +233,7 @@ def load_single_polar(polar_path):
 
     return df
 
+
 def load_polar(positive_path, negative_path):
 
     df_positive = load_single_polar(positive_path)
@@ -251,9 +252,12 @@ def load_polar(positive_path, negative_path):
     )
 
     if df.empty:
-        raise RuntimeError("No valid XFOIL aerodynamic data.")
+        raise RuntimeError(
+            "No valid XFOIL aerodynamic data."
+        )
 
     return df
+
 # ---------------------------------------------------------
 # Basic airfoil characteristics
 # ---------------------------------------------------------
