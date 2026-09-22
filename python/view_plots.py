@@ -5,6 +5,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
+import webbrowser
+from threading import Timer
+
 from dash import Dash, dcc, html, Input, Output, State
 from xfoil_run import (
     WORKDIR as XFOIL_WORKDIR,
@@ -1146,6 +1149,14 @@ def make_xfoil_figures(df):
 
     return lift, drag, ld, moment
 
+
+def open_browser():
+    webbrowser.open_new("http://127.0.0.1:8050/")
+
+
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True)
+    Timer(1, open_browser).start()
+    app.run(debug=True,
+            use_reloader=False,
+            )
