@@ -261,14 +261,60 @@ def run_batch(batch):
 
     return pd.DataFrame(results)
 
+def prepare_batch(mode, alpha_bounds=None):
+    batch = dict(BATCH_PRESETS[mode])
+    if alpha_bounds is None:
+        return batch
+    bounds = np.asarray(alpha_bounds, dtype=float)
+    if bounds.shape != (2,) or not np.all(np.isfinite(bounds)):
+        raise ValueError(
+            "The effective alpha sweep must two finite values."
+        )
+    lower, upper = bounds
+    if lower >= upper:
+        raise ValueError(
+            "The effective alpha sweep must have lower < upper."
+        )
+    requested = list(batch["alpha"])
+    tolerance = 1e-6
+    effective = [
+        alpha for alpha in requested
+        if lower - tolerance <= alpha <= upper + tolerance
+    ]
+    omitted = [
+        alpha for alpha in requested
+        if not lower - tolerance <= alpha <= upper + tolerance
+    ]
 
-def main(run_name="test"):
+    print(f"\nAlpha screening: {mode}")
+    print(f"XFOIL continuous coverage: {lower:g} -> {upper:g} deg")
+    print(f"Requested: {requested}")
+    print(f"Retained:  {effective}")
+    print(f"Omitted:   {omitted}")
+
+    if not effective: 
+        raise ValueError(
+            "No requested alpha values fall within the effective range."
+        )
+    batch["alpha"] = effective
+    return batch
+
+def main(run_name="test", alpha_bounds=None):
     print("Running vspaero_run.py...")
+    modes = (
+        list(FULL_ANALYSIS_SEQUENCE)
+        if ANALYSIS_MODE == "full"
+        else [ANALYSIS_MODE]
+    )
+    batches = {
+        mode: prepare_batch(mode, alpha_bounds)
+        for mode in modes
+    }
+
     output_dir = ROOT.parent / "output"
     output_dir.mkdir(exist_ok=True)
-    initialize_vsp_model(vsp_file)
-    initialize_vsp_model(vsp_file)
 
+    initialize_vsp_model(vsp_file)
     regenerate_solver_geometry()
 
     if ANALYSIS_MODE == "full":
@@ -276,7 +322,7 @@ def main(run_name="test"):
 
         for mode in FULL_ANALYSIS_SEQUENCE:
             print(f"\n=== Running batch: {mode} ===")
-            batch = BATCH_PRESETS[mode]
+            batch = batches[mode]
             df = run_batch(batch)
 
             batch_output = output_dir / f"vsp_aero_results_{mode}_{run_name}.csv"
@@ -287,17 +333,18 @@ def main(run_name="test"):
         df_all.to_csv(output_dir / "vsp_aero_results_full.csv", index=False)
 
     else:
-        batch = BATCH_PRESETS[ANALYSIS_MODE]
+        batch = batches[ANALYSIS_MODE]
         df = run_batch(batch)
         df.to_csv(output_dir / f"vsp_aero_results_{ANALYSIS_MODE}.csv", index=False)
 
-def run_vspaero_analysis(aircraft=None, mode="full", run_name="test"):
+def run_vspaero_analysis(aircraft=None, mode="full", run_name="test", alpha_bounds=None,):
     global ANALYSIS_MODE
 
     ANALYSIS_MODE = mode
 
     start_time = time.perf_counter()
-    main(run_name=run_name)
+    main(run_name=run_name,
+         alpha_bounds=alpha_bounds,)
     elapsed_time = time.perf_counter() - start_time
 
     print(f"vspaero_run.py completed in {elapsed_time:.2f} seconds")

@@ -4,6 +4,14 @@ from vspaero_run import run_vspaero_analysis
 from trim import build_trim_table
 from performance import compute_range_table
 
+from xfoil_run import(
+    WORKDIR as XFOIL_WORKDIR,
+    select_airfoil,
+    run_xfoil,
+    load_polar,
+    analyze_polar,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "configs" / "kestrel.yaml"
 
@@ -37,10 +45,10 @@ def main():
     )
 
     reuse = input(
-        "Reuse existing latest VSPAERO CSV? [Y/n]: "
+        "Reuse existing latest VSPAERO CSV? [y/n]: "
     ).strip().lower()
 
-    if reuse in ("", "y", "yes"):
+    if reuse in ("Y", "y", "yes"):
         if not latest_aero_csv.exists():
             raise FileNotFoundError(
                 f"No existing aerodynamic CSV found: {latest_aero_csv}"
@@ -48,14 +56,87 @@ def main():
 
         aero_csv = latest_aero_csv
         print(f"Reusing {aero_csv}")
+        print(
+            "Reusing existing aerodynamic data; "
+            "XFOIL clipping is not reapplied."
+        )
 
     else:
+        constrain_alpha = aircraft["vspaero"].get(
+            "constrain_alpha_to_xfoil", False
+        )
+
+        if not isinstance(constrain_alpha, bool):
+            raise ValueError(
+                "constrain_alpha_to_xfoil must be true or false "
+                "in YAML, without quotes."
+            )
+
+        alpha_bounds = None
+
+        if constrain_alpha:
+            # Clipping requires XFOIL coverage.
+            run_xfoil_first = True
+        else:
+            choice = input(
+                "Run XFOIL for reference only? [y/N]: "
+            ).strip().lower()
+
+            if choice not in ("", "y", "yes", "n", "no"):
+                raise ValueError("Please enter Y or N.")
+
+            run_xfoil_first = choice in ("y", "yes")
+
+        if run_xfoil_first:
+            airfoil_path = select_airfoil(XFOIL_WORKDIR)
+
+            positive_path, negative_path = run_xfoil(
+                airfoil_path
+            )
+
+            polar_df = load_polar(
+                positive_path,
+                negative_path,
+            )
+
+            xfoil_results = analyze_polar(polar_df)
+
+            if constrain_alpha:
+                coverage_error = xfoil_results["coverage_error"]
+
+                if coverage_error is not None:
+                    raise RuntimeError(
+                        f"Cannot apply XFOIL clipping: {coverage_error}"
+                    )
+
+                lower = xfoil_results["contiguous_alpha_min_deg"]
+                upper = xfoil_results["contiguous_alpha_max_deg"]
+
+                if lower is None or upper is None:
+                    raise RuntimeError(
+                        "Cannot apply XFOIL clipping: "
+                        "continuous coverage bounds are missing."
+                    )
+
+                alpha_bounds = (lower, upper)
+
+                print(
+                    "\nConvergence-based alpha clipping enabled: "
+                    f"{lower:g} -> {upper:g} deg"
+                )
+            else:
+                print(
+                    "\nXFOIL results are for reference only. "
+                    "The requested VSPAERO sweep is unchanged."
+                )
+
         aero_csv = run_vspaero_analysis(
             aircraft=aircraft,
             mode="alpha_elevator",
             run_name=run_name,
+            alpha_bounds=alpha_bounds,
         )
-
+    
     trim_table = build_trim_table(
         aircraft=aircraft,
         aero_csv=aero_csv,

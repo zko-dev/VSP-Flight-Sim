@@ -116,7 +116,6 @@ XFOIL failed for {polar_filename}
 
 
 def run_xfoil(airfoil_path):
-
     airfoil_name = airfoil_path.stem
 
     print("\n--------------------------------")
@@ -130,7 +129,7 @@ def run_xfoil(airfoil_path):
     # Positive branch
     positive_path = run_xfoil_branch(
         airfoil_path,
-        "xfoil_positive.pol",
+        f"{airfoil_name}_positive.pol",
         ALPHA_MAX,
         ALPHA_STEP,
     )
@@ -138,7 +137,7 @@ def run_xfoil(airfoil_path):
     # Negative branch
     negative_path = run_xfoil_branch(
         airfoil_path,
-        "xfoil_negative.pol",
+        f"{airfoil_name}_negative.pol",
         ALPHA_MIN,
         -ALPHA_STEP,
     )
@@ -148,52 +147,6 @@ def run_xfoil(airfoil_path):
 # ---------------------------------------------------------
 # Parse XFOIL polar
 # ---------------------------------------------------------
-
-def load_polar(polar_path):
-
-    df = pd.read_csv(
-        polar_path,
-        sep=r"\s+",
-        skiprows=12,
-        names=[
-            "alpha",
-            "CL",
-            "CD",
-            "CDp",
-            "CM",
-            "Top_Xtr",
-            "Bot_Xtr",
-            "Top_Itr",
-            "Bot_Itr",
-        ],
-    )
-
-    # Make sure the important columns are numeric.
-    # Any malformed XFOIL rows become NaN.
-    numeric_columns = [
-        "alpha",
-        "CL",
-        "CD",
-        "CDp",
-        "CM",
-        "Top_Xtr",
-        "Bot_Xtr",
-    ]
-
-    for col in numeric_columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-
-    # Remove rows where XFOIL did not produce usable aero data
-    df = df.dropna(
-        subset=["alpha", "CL", "CD", "CM"]
-    ).reset_index(drop=True)
-
-    if df.empty:
-        raise RuntimeError(
-            f"No valid aerodynamic data found in:\n{polar_path}"
-        )
-
-    return df
 
 def load_single_polar(polar_path):
 
@@ -258,6 +211,52 @@ def load_polar(positive_path, negative_path):
 
     return df
 
+def get_contiguous_alpha_range(df, alpha_step):
+    tolerance = 1e-6
+
+    if not 0 < alpha_step < float("inf"):
+        raise ValueError("alpha_step must be positive and finite.")
+
+    alphas = sorted(float(a) for a in df["alpha"].unique())
+
+    # Locate the starting point used by both XFOIL branches.
+    zero_index = next(
+        (
+            i for i, alpha in enumerate(alphas)
+            if abs(alpha) <= tolerance
+        ),
+        None,
+    )
+
+    if zero_index is None:
+        raise ValueError(
+            "No alpha=0 result exists. Cannot establish "
+            "continuous XFOIL coverage around zero."
+        )
+
+    left = zero_index
+    right = zero_index
+
+    # Walk toward negative alpha until we encounter a gap.
+    while left > 0:
+        spacing = alphas[left] - alphas[left - 1]
+
+        if spacing > alpha_step + tolerance:
+            break
+
+        left -= 1
+
+    # Walk toward positive alpha until we encounter a gap.
+    while right < len(alphas) - 1:
+        spacing = alphas[right + 1] - alphas[right]
+
+        if spacing > alpha_step + tolerance:
+            break
+
+        right += 1
+
+    return alphas[left], alphas[right]
+
 # ---------------------------------------------------------
 # Basic airfoil characteristics
 # ---------------------------------------------------------
@@ -297,13 +296,34 @@ def analyze_polar(df):
     actual_alpha_min = df["alpha"].min()
     actual_alpha_max = df["alpha"].max()
 
+    contiguous_alpha_min = None
+    contiguous_alpha_max = None
+    coverage_error = None
+
+    try:
+        contiguous_alpha_min, contiguous_alpha_max = (
+            get_contiguous_alpha_range(df, ALPHA_STEP)
+        )
+    except ValueError as exc:
+        coverage_error = str(exc)
+
+    alpha_tolerance = 1e-6
     negative_sweep_complete = (
-        actual_alpha_min <= ALPHA_MIN + ALPHA_STEP
+        actual_alpha_min <= ALPHA_MIN + alpha_tolerance
     )
 
     positive_sweep_complete = (
-        actual_alpha_max >= ALPHA_MAX - ALPHA_STEP
+        actual_alpha_max >= ALPHA_MAX - alpha_tolerance
     )
+
+    # Detect gaps larger than the requested alpha spacing.
+    returned_alphas = sorted(df["alpha"].unique())
+
+    alpha_gaps = []
+
+    for left, right in zip(returned_alphas[:-1], returned_alphas[1:]):
+        if right - left > ALPHA_STEP + alpha_tolerance:
+            alpha_gaps.append((float(left), float(right)))
 
     # -----------------------------------------------------
     # Check whether extrema hit sweep boundaries
@@ -318,6 +338,11 @@ def analyze_polar(df):
         abs(alpha_clmin - ALPHA_MAX) < 1e-6
         or abs(alpha_clmin - ALPHA_MIN) < 1e-6
     )
+
+    if alpha_gaps:
+        print("WARNING: Gaps exist inside the returned alpha range:")
+        for left, right in alpha_gaps:
+            print(f"  Between {left:.2f} and {right:.2f} deg")
 
     # -----------------------------------------------------
     # Print sweep coverage
@@ -357,6 +382,15 @@ def analyze_polar(df):
     print("Airfoil Characteristics")
     print("--------------------------------")
 
+    if coverage_error is None:
+        print(
+            f"Continuous coverage around 0 deg: "
+            f"{contiguous_alpha_min:.1f} -> "
+            f"{contiguous_alpha_max:.1f} deg"
+        )
+    else:
+        print(f"WARNING: {coverage_error}")
+    
     if positive_sweep_complete:
         print(f"CLmax:              {cl_max:.4f}")
         print(f"Alpha at CLmax:     {alpha_clmax:.2f} deg")
@@ -409,6 +443,11 @@ def analyze_polar(df):
 
         "positive_sweep_complete": positive_sweep_complete,
         "negative_sweep_complete": negative_sweep_complete,
+
+        "alpha_gaps_deg": alpha_gaps,
+        "contiguous_alpha_min_deg": contiguous_alpha_min,
+        "contiguous_alpha_max_deg": contiguous_alpha_max,
+        "coverage_error": coverage_error,
 
         "CL_max_at_boundary": clmax_at_boundary,
         "CL_min_at_boundary": clmin_at_boundary,
