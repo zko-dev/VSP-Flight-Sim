@@ -35,6 +35,16 @@ def get_run_name():
 def main():
     run_name = get_run_name()
     aircraft = load_aircraft_config(CONFIG_PATH)
+    print(f"Study script: {Path(__file__).resolve()}")
+    print(f"Configuration: {CONFIG_PATH.resolve()}")
+    print(
+        "XFOIL clipping setting:",
+        repr(
+            aircraft["vspaero"].get(
+                "constrain_alpha_to_xfoil", "<missing>"
+            )
+        ),
+    )
 
     output_dir = ROOT / "output"
     output_dir.mkdir(exist_ok=True)
@@ -129,6 +139,13 @@ def main():
                     "\nXFOIL results are for reference only. "
                     "The requested VSPAERO sweep is unchanged."
                 )
+
+        print(f"Passing alpha_bounds to VSPAERO: {alpha_bounds}")
+
+        if constrain_alpha and alpha_bounds is None:
+            raise RuntimeError(
+                "Clipping is enabled, but no XFOIL bounds were produced."
+            )
 
         aero_csv = run_vspaero_analysis(
             aircraft=aircraft,
